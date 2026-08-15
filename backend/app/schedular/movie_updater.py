@@ -3,64 +3,49 @@ import asyncio
 from sqlalchemy.orm import Session
 
 from app.database.connection import SessionLocal
-from app.models.movie import Movie
-from app.services.tmdb.client import tmdb_get, aclose_client
+from app.services.tmdb.movies import import_popular_movies, TMDBAuthError
+from app.services.tmdb.client import aclose_client, TMDB_CACHE
+from ai.index_builder import build_recommendation_index
+from ai.recommender import invalidate_index_cache
 
 
 async def _update_movies_async():
+    """
+    The daily auto-update pipeline:
+      1. Re-fetch TMDB's popular list (500 movies) - adds anything new,
+         refreshes ratings/popularity on everything already imported.
+      2. Rebuild the content-recommendation index so new movies are
+         actually recommendable, not just sitting in the DB unused.
+      3. Invalidate in-memory caches (the FAISS index this server
+         process has cached, and the TMDB trending/top-rated/upcoming
+         cache) so the changes take effect immediately instead of
+         waiting for a restart or a TTL to expire.
+    """
     db: Session = SessionLocal()
 
     try:
-        print("Updating movies from TMDB...")
+        print("[auto-update] Refreshing movie catalog from TMDB...")
+        new_count = await import_popular_movies(db, pages=25)
+        print(f"[auto-update] {new_count} new movies added.")
 
-        for page in range(1, 6):
+        print("[auto-update] Rebuilding recommendation index...")
+        indexed = build_recommendation_index(db, verbose=False)
+        print(f"[auto-update] Recommendation index rebuilt ({indexed} movies).")
 
-            data = await tmdb_get("movie/popular", {"page": page})
+        invalidate_index_cache()
+        TMDB_CACHE.clear()
 
-            for item in data["results"]:
+        print("[auto-update] Done - catalog and recommendations are fresh.")
 
-                movie = db.query(Movie).filter(
-                    Movie.tmdb_id == item["id"]
-                ).first()
-
-                if movie:
-                    movie.title = item["title"]
-                    movie.original_title = item.get("original_title")
-                    movie.overview = item.get("overview")
-                    movie.poster_path = item.get("poster_path")
-                    movie.backdrop_path = item.get("backdrop_path")
-                    movie.vote_average = item.get("vote_average")
-                    movie.vote_count = item.get("vote_count")
-                    movie.popularity = item.get("popularity")
-                    movie.original_language = item.get("original_language")
-                    movie.adult = item.get("adult", False)
-
-                else:
-                    db.add(
-                        Movie(
-                            tmdb_id=item["id"],
-                            title=item["title"],
-                            original_title=item.get("original_title"),
-                            overview=item.get("overview"),
-                            poster_path=item.get("poster_path"),
-                            backdrop_path=item.get("backdrop_path"),
-                            vote_average=item.get("vote_average"),
-                            vote_count=item.get("vote_count"),
-                            popularity=item.get("popularity"),
-                            original_language=item.get("original_language"),
-                            adult=item.get("adult", False),
-                        )
-                    )
-
-        db.commit()
-
-        print("Movie database updated successfully.")
+    except TMDBAuthError as e:
+        print(f"[auto-update] Skipped: {e}")
 
     except Exception as e:
-        print(e)
+        print(f"[auto-update] Failed: {e}")
 
     finally:
         db.close()
+        await aclose_client()
 
 
 def update_movies():

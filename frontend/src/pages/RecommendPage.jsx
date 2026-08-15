@@ -109,12 +109,12 @@ export default function RecommendPage() {
 
       <DashboardHero movies={trending} />
 
-      <section className="mx-auto -mt-16 max-w-3xl px-6">
+      <section className="mx-auto -mt-10 max-w-2xl px-6">
         <form
           onSubmit={handleSearch}
-          className="flex items-center gap-2 rounded-2xl border border-cm-line bg-cm-surface p-2 shadow-[0_20px_60px_rgba(8,7,12,0.6)] backdrop-blur"
+          className="flex items-center gap-2 rounded-xl border border-cm-line bg-cm-surface p-1.5 text-sm shadow-[0_14px_40px_rgba(8,7,12,0.6)] backdrop-blur"
         >
-          <Search size={18} className="ml-2 text-cm-muted" />
+          <Search size={15} className="ml-2 text-cm-muted" />
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -127,7 +127,7 @@ export default function RecommendPage() {
           />
           <button
             type="submit"
-            className="rounded-xl bg-gradient-to-r from-cm-purple-deep to-cm-purple px-5 py-2.5 font-semibold text-white transition hover:brightness-110"
+            className="rounded-lg bg-gradient-to-r from-cm-purple-deep to-cm-purple px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
           >
             Search
           </button>

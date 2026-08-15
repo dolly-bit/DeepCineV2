@@ -100,6 +100,13 @@ class _TMDBCache:
         entry = self._entries.get(key)
         return entry["value"] if entry else None
 
+    def clear(self):
+        """Drops every cached entry. Called after the daily auto-update
+        job changes the underlying data, so stale trending/top-rated/
+        upcoming responses aren't served for up to their full TTL after
+        the catalog has actually changed."""
+        self._entries.clear()
+
 
 TMDB_CACHE = _TMDBCache()
 

@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/layout/Navbar";
 import MovieCard from "../components/home/MovieCard";
-import { getTrendingMovies, getTopRatedMovies, getUpcomingMovies, getPersonalizedRecommendations } from "../services/movies";
+import {
+  getTrendingMovies,
+  getTopRatedMovies,
+  getUpcomingMovies,
+  getPersonalizedRecommendations,
+  getCollaborativeRecommendations,
+} from "../services/movies";
 
 export default function MoviesListPage() {
   const location = useLocation();
@@ -35,6 +41,13 @@ export default function MoviesListPage() {
           }
         } else if (mode === "top-rated") {
           data = await getTopRatedMovies();
+        } else if (mode === "collaborative") {
+          const userId = localStorage.getItem("user_id");
+          if (!userId) {
+            data = [];
+          } else {
+            data = await getCollaborativeRecommendations(userId);
+          }
         } else if (mode === "upcoming") {
           data = await getUpcomingMovies();
           const today = new Date().toISOString().slice(0, 10);
@@ -78,6 +91,8 @@ export default function MoviesListPage() {
               <p className="mt-3 max-w-2xl text-sm text-slate-300">
                 {mode === "recommended"
                   ? "These picks are hand-selected to feel personal, cinematic, and easy to explore."
+                  : mode === "collaborative"
+                  ? "Matched with people who share your watch patterns."
                   : `Browse a curated collection of ${mode === "trending" ? "trending" : mode.replace("-", " ")} movies.`}
               </p>
             </div>
@@ -92,9 +107,9 @@ export default function MoviesListPage() {
         </div>
 
         {loading ? (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="h-[340px] animate-pulse rounded-3xl bg-zinc-800" />
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div key={index} className="h-[260px] animate-pulse rounded-2xl bg-zinc-800" />
             ))}
           </div>
         ) : error ? (
@@ -106,7 +121,7 @@ export default function MoviesListPage() {
             No movies available for this selection right now.
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
             {visibleMovies.map((movie) => (
               <div key={movie.id || movie.tmdb_id} className="cursor-pointer" onClick={() => navigate(`/movie/${movie.id || movie.tmdb_id}`)}>
                 <MovieCard movie={movie} />

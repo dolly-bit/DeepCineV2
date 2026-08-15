@@ -50,6 +50,20 @@ def _get_index_and_ids():
     return _index, _movie_ids
 
 
+def invalidate_index_cache():
+    """
+    Drops the in-memory cached FAISS index so the next recommendation
+    request reloads it from disk. Called after the daily auto-update job
+    rebuilds movie_index.faiss with newly-imported movies - without this,
+    a long-running server process would keep serving recommendations
+    from the stale index it loaded at first use, never seeing new movies
+    until it was restarted.
+    """
+    global _index, _movie_ids
+    _index = None
+    _movie_ids = None
+
+
 def recommend_movies(movie_name: str, top_k: int = 10):
 
     db = SessionLocal()

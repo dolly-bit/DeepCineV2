@@ -19,8 +19,8 @@ function CastAvatar({ actor }) {
   return (
     <div className="text-center">
       {showFallback ? (
-        <div className="flex h-64 w-full items-center justify-center rounded-xl bg-cm-surface-2">
-          <span className="text-3xl font-black text-white/25">
+        <div className="flex h-40 w-full items-center justify-center rounded-lg bg-cm-surface-2">
+          <span className="text-2xl font-black text-white/25">
             {actor.name?.charAt(0)?.toUpperCase() || "?"}
           </span>
         </div>
@@ -30,12 +30,12 @@ function CastAvatar({ actor }) {
           alt={actor.name}
           loading="lazy"
           onError={() => setFailed(true)}
-          className="h-64 w-full rounded-xl object-cover"
+          className="h-40 w-full rounded-lg object-cover"
         />
       )}
 
-      <h3 className="mt-3 font-semibold">{actor.name}</h3>
-      <p className="text-sm text-cm-muted">{actor.character}</p>
+      <h3 className="mt-2 text-sm font-semibold">{actor.name}</h3>
+      <p className="text-xs text-cm-muted">{actor.character}</p>
     </div>
   );
 }
@@ -100,7 +100,7 @@ export default function MovieDetails() {
   return (
     <div className="min-h-screen bg-cm-bg text-white">
       {/* Backdrop */}
-      <div className="relative h-[85vh]">
+      <div className="relative h-[62vh]">
         <BackdropImage
           src={movie.backdrop_url}
           title={movie.title}
@@ -110,78 +110,78 @@ export default function MovieDetails() {
 
         <button
           onClick={() => navigate(-1)}
-          className="absolute left-6 top-6 z-20 rounded-full bg-black/60 p-3 transition hover:bg-cm-purple"
+          className="absolute left-5 top-5 z-20 rounded-full bg-black/60 p-2.5 transition hover:bg-cm-purple"
         >
-          <ArrowLeft />
+          <ArrowLeft size={18} />
         </button>
 
-        <div className="relative z-10 mx-auto flex h-full max-w-7xl items-end gap-10 px-8 pb-12">
+        <div className="relative z-10 mx-auto flex h-full max-w-7xl items-end gap-7 px-6 pb-9">
           <PosterImage
             src={movie.poster_url}
             title={movie.title}
-            className="w-72 shrink-0 rounded-2xl shadow-2xl"
-            imgClassName="w-72 rounded-2xl object-cover shadow-2xl"
+            className="w-48 shrink-0 rounded-xl shadow-2xl"
+            imgClassName="w-48 rounded-xl object-cover shadow-2xl"
           />
 
           <div className="max-w-3xl">
-            <h1 className="text-6xl font-extrabold">{movie.title}</h1>
+            <h1 className="text-3xl font-extrabold md:text-4xl">{movie.title}</h1>
 
             {movie.tagline && (
-              <p className="mt-3 text-xl italic text-cm-violet">
+              <p className="mt-2 text-base italic text-cm-violet">
                 {movie.tagline}
               </p>
             )}
 
-            <div className="mt-6 flex flex-wrap gap-8">
-              <div className="flex items-center gap-2">
-                <Star size={20} fill="var(--color-cm-amber)" className="text-cm-amber" />
+            <div className="mt-3 flex flex-wrap gap-5 text-sm">
+              <div className="flex items-center gap-1.5">
+                <Star size={15} fill="var(--color-cm-amber)" className="text-cm-amber" />
                 <span>{movie.vote_average?.toFixed(1) ?? "N/A"}</span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Calendar size={20} />
+              <div className="flex items-center gap-1.5">
+                <Calendar size={15} />
                 <span>{movie.release_date || "TBA"}</span>
               </div>
 
               {movie.runtime ? (
-                <div className="flex items-center gap-2">
-                  <Clock size={20} />
+                <div className="flex items-center gap-1.5">
+                  <Clock size={15} />
                   <span>{movie.runtime} min</span>
                 </div>
               ) : null}
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-3 flex flex-wrap gap-2">
               {movie.genres?.map((genre) => (
                 <span
                   key={genre.id}
-                  className="rounded-full border border-cm-purple bg-cm-purple/20 px-4 py-2"
+                  className="rounded-full border border-cm-purple bg-cm-purple/20 px-3 py-1 text-xs"
                 >
                   {genre.name}
                 </span>
               ))}
             </div>
 
-            <p className="mt-8 text-lg leading-8 text-slate-300">
+            <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-300 md:text-base">
               {movie.overview}
             </p>
 
-            <div className="mt-10 flex gap-5">
+            <div className="mt-6 flex gap-3">
               {trailer && (
                 <a
                   href={trailer}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cm-purple-deep to-cm-purple px-7 py-4 font-semibold transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cm-purple-deep to-cm-purple px-5 py-2.5 text-sm font-semibold transition hover:brightness-110"
                 >
-                  <Play size={20} />
+                  <Play size={16} />
                   Watch Trailer
                 </a>
               )}
 
               <button
                 onClick={() => navigate(-1)}
-                className="rounded-xl bg-white/10 px-7 py-4 transition hover:bg-white/20"
+                className="rounded-xl bg-white/10 px-5 py-2.5 text-sm transition hover:bg-white/20"
               >
                 Back
               </button>
@@ -191,10 +191,10 @@ export default function MovieDetails() {
       </div>
 
       {cast.length > 0 && (
-        <div className="mx-auto max-w-7xl px-8 py-12">
-          <h2 className="mb-8 text-3xl font-bold">🎭 Cast</h2>
+        <div className="mx-auto max-w-7xl px-6 py-8">
+          <h2 className="mb-5 text-xl font-bold">🎭 Cast</h2>
 
-          <div className="grid grid-cols-2 gap-8 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-3 gap-4 md:grid-cols-5 lg:grid-cols-6">
             {cast.map((actor) => (
               <CastAvatar key={actor.id} actor={actor} />
             ))}
@@ -203,19 +203,24 @@ export default function MovieDetails() {
       )}
 
       {similarMovies.length > 0 && (
-        <div className="mx-auto max-w-7xl px-8 pb-16">
-          <h2 className="mb-8 text-3xl font-bold">🎬 Similar Movies</h2>
+        <div className="mx-auto max-w-7xl px-6 pb-10">
+          <h2 className="mb-5 text-xl font-bold">🎬 Similar Movies</h2>
 
-          <div className="flex gap-6 overflow-x-auto scrollbar-hide pb-2">
-            {similarMovies.map((similar) => (
-              <div
-                key={similar.id}
-                onClick={() => navigate(`/movie/${similar.id}`)}
-                className="cursor-pointer"
-              >
-                <MovieCard movie={similar} />
-              </div>
-            ))}
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-cm-bg to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-cm-bg to-transparent" />
+
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+              {similarMovies.map((similar) => (
+                <div
+                  key={similar.id}
+                  onClick={() => navigate(`/movie/${similar.id}`)}
+                  className="shrink-0 cursor-pointer"
+                >
+                  <MovieCard movie={similar} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

@@ -5,21 +5,32 @@ from app.database.connection import SessionLocal
 from app.services.tmdb.movies import import_popular_movies, TMDBAuthError
 from app.services.tmdb.client import aclose_client
 
+# 25 pages x 20 movies/page = up to 500 movies.
+PAGES = 25
+
 
 async def main():
     db = SessionLocal()
     try:
-        total = await import_popular_movies(db, pages=5)
+        new_count = await import_popular_movies(db, pages=PAGES)
 
-        if total == 0:
+        if new_count == 0:
             print(
-                "0 movies imported. If you saw page errors above, check "
-                "backend/.env's TMDB_ACCESS_TOKEN. If movies already "
-                "existed in the DB from a previous run, that's expected - "
-                "nothing new to add."
+                "0 new movies. If you saw page errors above, check "
+                "backend/.env's TMDB_ACCESS_TOKEN. Otherwise this is "
+                "expected if you already imported recently - TMDB's "
+                "popular list doesn't change much day to day, so a repeat "
+                "run mostly just refreshes existing movies' ratings "
+                "(see 'Refreshed stats for N already-imported movies' "
+                "above) rather than adding new ones."
             )
         else:
-            print(f"{total} movies imported successfully.")
+            print(f"{new_count} new movies imported successfully.")
+
+        print(
+            "\nRun `python generate_embeddings.py` next so new movies are "
+            "included in content-based recommendations."
+        )
 
     except TMDBAuthError as e:
         print(f"\n[ERROR] {e}\n")

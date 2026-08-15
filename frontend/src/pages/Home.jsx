@@ -98,31 +98,31 @@ export default function Home() {
       {/* System branding: makes it unmistakably clear this is a
           personalized, collaborative-filtering-powered recommender,
           not just a generic movie browser. */}
-      <section className="max-w-7xl mx-auto px-6 mt-14">
-        <div className="rounded-[32px] border border-white/10 bg-gradient-to-br from-purple-600/15 via-white/5 to-cyan-500/10 p-6 sm:p-8">
-          <p className="text-xs uppercase tracking-[0.35em] text-purple-300">
+      <section className="max-w-7xl mx-auto px-6 mt-10">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-purple-600/15 via-white/5 to-cyan-500/10 p-5 sm:p-6">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-purple-300">
             DeepCine
           </p>
-          <h2 className="mt-2 text-2xl sm:text-3xl font-semibold text-white">
+          <h2 className="mt-1.5 text-xl sm:text-2xl font-semibold text-white">
             A personalized movie recommendation system
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-300">
+          <p className="mt-1.5 max-w-3xl text-xs text-slate-300">
             {userId
               ? "Your picks below are being generated live from your watch history and search activity."
               : "Sign up and start watching to unlock recommendations built just for you."}
           </p>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {HOW_IT_WORKS.map(({ icon: Icon, title, description }) => (
               <div
                 key={title}
-                className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                className="rounded-xl border border-white/10 bg-black/20 p-3"
               >
-                <Icon size={18} className="text-purple-300" />
-                <p className="mt-3 text-sm font-semibold text-white">
+                <Icon size={15} className="text-purple-300" />
+                <p className="mt-2 text-xs font-semibold text-white">
                   {title}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
                   {description}
                 </p>
               </div>
@@ -140,6 +140,7 @@ export default function Home() {
           title="🔥 Trending Movies"
           movies={trending}
           loading={loading}
+          seeMoreState={{ mode: "trending", title: "Trending Movies" }}
         />
       </div>
 
@@ -148,6 +149,7 @@ export default function Home() {
           title="⭐ Top Rated Movies"
           movies={topRated}
           loading={loading}
+          seeMoreState={{ mode: "top-rated", title: "Top Rated Movies" }}
         />
       </div>
 
@@ -156,6 +158,7 @@ export default function Home() {
           title="📅 Upcoming Movies"
           movies={upcoming}
           loading={loading}
+          seeMoreState={{ mode: "upcoming", title: "Upcoming Movies" }}
         />
       </div>
     </div>

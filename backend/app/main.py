@@ -17,6 +17,7 @@ from app.services.tmdb.movies import (
     get_upcoming_movies,
 )
 from app.services.tmdb.client import aclose_client
+from app.schedular.schedular import start_scheduler, stop_scheduler
 
 logger = logging.getLogger("deepcine")
 
@@ -69,9 +70,17 @@ async def warm_up_caches():
 
     asyncio.create_task(_warm())
 
+    # Starts the background scheduler that keeps the movie catalog fresh
+    # automatically (daily re-import + recommendation index rebuild).
+    # BackgroundScheduler.start() is synchronous but effectively instant
+    # (it just spins up its own worker thread) - it does not block
+    # startup or wait for the first job to run.
+    start_scheduler()
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    stop_scheduler()
     await aclose_client()
 
 

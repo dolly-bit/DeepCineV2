@@ -150,18 +150,21 @@ export default function SearchModal({ isOpen, onClose }) {
 
 {!query && (
   <>
-    <h2 className="text-2xl font-bold mb-6">
+    <h2 className="text-xl font-bold mb-4">
       🔥 Trending Movies
     </h2>
 
-    <div className="flex  gap-5 overflow-x-auto scrollbar-hide pb-2">
+    <div className="relative">
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#121212] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#121212] to-transparent" />
 
-      {trending.map((movie) => (
-        <MovieCard
-          key={movie.id}
-          movie={movie}
-          />
-      ))}
+      <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-3">
+        {trending.map((movie) => (
+          <div key={movie.id} onClick={onClose} className="shrink-0">
+            <MovieCard movie={movie} />
+          </div>
+        ))}
+      </div>
     </div>
   </>
 )}

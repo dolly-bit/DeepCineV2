@@ -12,16 +12,25 @@ class TMDBAuthError(Exception):
     clear message instead of retrying or silently importing 0 movies."""
 
 
-async def import_popular_movies(db: Session, pages: int = 5):
+async def import_popular_movies(db: Session, pages: int = 25):
     """
-    Imports up to `pages` pages (20 movies each) of TMDB's popular list.
+    Imports up to `pages` pages (20 movies each) of TMDB's popular list -
+    default 25 pages = 500 movies.
 
-    Each page is committed as soon as it succeeds, so a failure on page 3
-    still leaves pages 1-2 saved instead of losing everything - and a
-    401 (bad/missing TMDB_ACCESS_TOKEN) fails fast with a clear message
-    instead of quietly returning 0 with no explanation.
+    Each page is committed as soon as it succeeds, so a failure on a
+    later page still leaves earlier pages saved instead of losing
+    everything - and a 401 (bad/missing TMDB_ACCESS_TOKEN) fails fast
+    with a clear message instead of quietly returning 0 with no
+    explanation.
+
+    Movies already in the DB are UPDATED (rating, popularity, etc.)
+    rather than skipped - this is what makes re-running this safe to
+    call repeatedly (e.g. from the daily auto-update job) instead of it
+    only ever adding the handful of movies that are new to the list
+    since last time.
     """
-    count = 0
+    count_new = 0
+    count_updated = 0
     seen_tmdb_ids = set()
     failed_pages = []
 
@@ -48,7 +57,13 @@ async def import_popular_movies(db: Session, pages: int = 5):
             failed_pages.append(page)
             continue
 
-        page_added = 0
+        if not data.get("results"):
+            # Ran past the last page TMDB actually has - stop early
+            # instead of burning through the rest of the range.
+            break
+
+        page_new = 0
+        page_updated = 0
 
         for item in data.get("results", []):
             tmdb_id = item["id"]
@@ -61,11 +76,7 @@ async def import_popular_movies(db: Session, pages: int = 5):
                 Movie.tmdb_id == tmdb_id
             ).first()
 
-            if existing:
-                continue
-
-            db.add(Movie(
-                tmdb_id=tmdb_id,
+            fields = dict(
                 title=item["title"],
                 original_title=item.get("original_title"),
                 overview=item.get("overview"),
@@ -76,15 +87,25 @@ async def import_popular_movies(db: Session, pages: int = 5):
                 popularity=item.get("popularity"),
                 original_language=item.get("original_language"),
                 adult=item.get("adult", False),
-            ))
+            )
 
-            count += 1
-            page_added += 1
+            if existing:
+                for key, value in fields.items():
+                    setattr(existing, key, value)
+                count_updated += 1
+                page_updated += 1
+            else:
+                db.add(Movie(tmdb_id=tmdb_id, **fields))
+                count_new += 1
+                page_new += 1
 
         # Commit after each page so partial progress survives a later
         # page failing, instead of an all-or-nothing single commit.
         db.commit()
-        print(f"  Page {page}: +{page_added} movies (running total: {count})")
+        print(
+            f"  Page {page}: +{page_new} new, {page_updated} updated "
+            f"(running total: {count_new} new)"
+        )
 
     if failed_pages:
         print(
@@ -93,7 +114,9 @@ async def import_popular_movies(db: Session, pages: int = 5):
             f"imported movies won't be duplicated."
         )
 
-    return count
+    print(f"  Refreshed stats for {count_updated} already-imported movies.")
+
+    return count_new
 
 
 async def get_trending_movies():

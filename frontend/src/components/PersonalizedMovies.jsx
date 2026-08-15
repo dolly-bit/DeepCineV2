@@ -45,6 +45,7 @@ export default function PersonalizedMovies() {
       title="✨ Recommended For You"
       description="A mix of collaborative filtering (what viewers like you watched) and your favorite genres — this gets smarter the more you watch."
       emptyMessage="Watch a few movies (click into any title's page) and we'll start building your personalized recommendations here."
+      seeMoreState={{ mode: "recommended", title: "Recommended For You" }}
     />
   );
 }

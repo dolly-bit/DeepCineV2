@@ -51,6 +51,7 @@ export default function CollaborativeMovies() {
       eyebrow="Collaborative filtering"
       title="🤝 Viewers Like You Also Watched"
       description="Matched with people who share your watch patterns — not your genres, your actual taste."
+      seeMoreState={{ mode: "collaborative", title: "Viewers Like You Also Watched" }}
     />
   );
 }
