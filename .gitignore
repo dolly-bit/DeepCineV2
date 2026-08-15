@@ -1,0 +1,50 @@
+# Python
+.venv/
+venv/
+env/
+backend/.venv/
+backend/venv/
+
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment variables
+.env
+.env.*
+backend/.env
+frontend/.env
+
+# AI / generated data
+ai/faiss_index/
+ai/embeddings/
+*.npy
+*.npz
+*.pt
+*.pth
+*.faiss
+*.sqlite3
+*.db
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

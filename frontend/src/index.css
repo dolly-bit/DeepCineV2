@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+/*
+ * DeepCine design tokens.
+ *
+ * Tailwind v4 (via @tailwindcss/vite) reads theme customization from an
+ * `@theme` block in CSS, NOT from a tailwind.config.js file - that file
+ * previously existed at the wrong path (src/tailwind.config.js) and was
+ * never actually loaded, which meant every `cm-*` class used across the
+ * app (bg-cm-bg, text-cm-purple, font-display, animate-cm-fade-up, etc.)
+ * silently did nothing. This block is the real, working source of truth
+ * for those tokens now - one design system, used consistently everywhere.
+ */
+@theme {
+  --color-cm-bg: #08070c;
+  --color-cm-bg-alt: #0d0b14;
+  --color-cm-surface: #14121d;
+  --color-cm-surface-2: #1c1929;
+  --color-cm-purple: #a855f7;
+  --color-cm-purple-deep: #6d28d9;
+  --color-cm-violet: #c084fc;
+  --color-cm-cyan: #22d3ee;
+  --color-cm-amber: #facc15;
+  --color-cm-text: #f4f2f8;
+  --color-cm-muted: #948ea3;
+  --color-cm-line: rgba(244, 242, 248, 0.1);
+
+  --font-display: "Bebas Neue", sans-serif;
+  --font-sans: "Inter", sans-serif;
+
+  --animate-cm-fade-up: cm-fade-up 0.6s ease both;
+  --animate-cm-fade: cm-fade 0.2s ease both;
+  --animate-cm-glow: cm-glow 6s ease-in-out infinite;
+}
+
+@keyframes cm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cm-glow {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.06);
+  }
+}
+
+/* Hide scrollbar */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+body {
+  margin: 0;
+  background: var(--color-cm-bg);
+  color: var(--color-cm-text);
+  font-family: var(--font-sans);
+}
+
+@keyframes marquee {
+  from {
+    transform: translate(0);
+  }
+  to {
+    transform: translate(-50%);
+  }
+}
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px);
+  }
+  50% {
+    transform: translateY(-12px) translateX(6px);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.48;
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
