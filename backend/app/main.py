@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.connection import Base, engine
+from app.core.config import settings
 from app.models import User, Movie, Genre, MovieGenre, WatchHistory, SearchHistory
 from app.routes.auth import router as auth_router
 from app.routes.movies import router as movies_router
@@ -31,7 +32,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
