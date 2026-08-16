@@ -6,6 +6,7 @@ import DashboardHero from "../components/home/DashboardHero";
 import MovieSlider from "../components/home/MovieSlider";
 import PersonalizedMovies from "../components/PersonalizedMovies";
 import CollaborativeMovies from "../components/CollaborativeMovies";
+import MoodBrowser from "../components/home/MoodBrowser";
 import { getAuthState } from "../services/auth";
 
 import {
@@ -130,6 +131,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <MoodBrowser />
 
       <PersonalizedMovies />
 

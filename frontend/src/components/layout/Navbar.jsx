@@ -36,6 +36,14 @@ export default function Navbar() {
 
           <button
             type="button"
+            onClick={() => navigate("/discover")}
+            className="hover:text-white"
+          >
+            Discover
+          </button>
+
+          <button
+            type="button"
             onClick={() => navigate("/movies", { state: { mode: "recommended", title: "Recommended For You", query: "Avengers" } })}
             className="hover:text-white"
           >

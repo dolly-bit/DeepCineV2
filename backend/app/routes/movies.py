@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,12 @@ from app.services.tmdb.movies import (
     search_movies,
 )
 from app.services.tmdb.details import tmdb_get
+from app.services.tmdb.discover import (
+    discover_movies,
+    list_moods,
+    LANGUAGES,
+    GENRE_IDS,
+)
 from app.services.ai_recommendation_services import get_personalized_recommendations
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
@@ -126,6 +133,66 @@ def recommended_movies(
 ):
     movies = get_personalized_recommendations(user_id, db)
     return [_serialize_db_movie(movie) for movie in movies]
+
+
+@router.get("/moods")
+def get_moods():
+    """Returns the list of browsable moods, for building filter UI."""
+    return list_moods()
+
+
+@router.get("/genres")
+def get_genres():
+    """Returns the list of browsable genres (name + TMDB id), for
+    building filter UI."""
+    return [{"id": gid, "name": name.replace("_", " ").title()} for name, gid in GENRE_IDS.items()]
+
+
+@router.get("/languages")
+def get_languages():
+    """Returns the curated list of browsable languages."""
+    return LANGUAGES
+
+
+@router.get("/discover")
+async def discover(
+    genres: Optional[str] = None,
+    language: Optional[str] = None,
+    mood: Optional[str] = None,
+    sort_by: str = "popularity.desc",
+    page: int = 1,
+):
+    """
+    Browse movies by any combination of mood / genre / language.
+
+    - `genres`: comma-separated TMDB genre IDs, e.g. "28,12"
+    - `language`: ISO 639-1 code, e.g. "hi", "ko", "en"
+    - `mood`: one of the keys from GET /movies/moods, e.g. "feel_good"
+    - `sort_by`: TMDB sort key, e.g. "popularity.desc", "vote_average.desc"
+
+    All filters are optional and combine together (e.g. mood=scary &
+    language=ko returns scary Korean movies). If nothing is passed,
+    behaves like a generic popularity-sorted discover feed.
+    """
+    try:
+        genre_ids = (
+            [int(g) for g in genres.split(",") if g.strip()]
+            if genres
+            else None
+        )
+
+        results = await discover_movies(
+            genres=genre_ids,
+            language=language,
+            mood=mood,
+            sort_by=sort_by,
+            page=page,
+        )
+
+        return format_movies(results)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{movie_id}")

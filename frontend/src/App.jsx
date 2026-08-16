@@ -11,6 +11,7 @@ import MovieDetails from "./pages/MovieDetails";
 import SearchPage  from "./pages/Search";
 import MoviesListPage from "./pages/MoviesListPage";
 import Profile from "./pages/Profile";
+import Discover from "./pages/Discover";
 import { isAuthenticated } from "./services/auth";
 
 function ProtectedRoute({ children }) {
@@ -81,6 +82,15 @@ export default function App() {
       element={
         <ProtectedRoute>
           <Profile />
+        </ProtectedRoute>
+      }
+    />
+
+    <Route
+      path="/discover"
+      element={
+        <ProtectedRoute>
+          <Discover />
         </ProtectedRoute>
       }
     />

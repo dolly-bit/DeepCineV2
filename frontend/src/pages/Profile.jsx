@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Mail, User as UserIcon, ShieldCheck } from "lucide-react";
+import { LogOut, Mail, User as UserIcon, ShieldCheck, X } from "lucide-react";
 
 import Navbar from "../components/layout/Navbar";
 import { getAuthState, getCurrentUser, clearAuthState } from "../services/auth";
@@ -45,7 +45,16 @@ export default function Profile() {
       <Navbar />
 
       <section className="mx-auto max-w-3xl px-6 py-16">
-        <div className="rounded-[32px] border border-cm-line bg-cm-surface p-8 sm:p-10">
+        <div className="relative rounded-[32px] border border-cm-line bg-cm-surface p-8 sm:p-10">
+          <button
+            type="button"
+            onClick={() => navigate("/home")}
+            aria-label="Close profile"
+            className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border border-cm-line bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+
           <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cm-purple-deep to-cm-purple text-3xl font-bold text-white">
               {initial}

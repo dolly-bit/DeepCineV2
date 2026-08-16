@@ -147,3 +147,32 @@ export const getPersonalizedRecommendations = async (userId) => {
 
   return (res.data || []).map(normalizeMovie);
 };
+
+// Discover: browse by mood / genre / language
+export const getMoods = async () => {
+  const res = await api.get("/movies/moods");
+  return res.data || [];
+};
+
+export const getGenres = async () => {
+  const res = await api.get("/movies/genres");
+  return res.data || [];
+};
+
+export const getLanguages = async () => {
+  const res = await api.get("/movies/languages");
+  return res.data || [];
+};
+
+export const discoverMovies = async ({ mood, genres, language, sortBy, page = 1 } = {}) =>
+  safeRequest(() =>
+    api.get("/movies/discover", {
+      params: {
+        mood: mood || undefined,
+        genres: genres && genres.length ? genres.join(",") : undefined,
+        language: language || undefined,
+        sort_by: sortBy || undefined,
+        page,
+      },
+    })
+  );
