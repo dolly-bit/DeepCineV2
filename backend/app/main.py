@@ -12,6 +12,7 @@ from app.routes.movies import router as movies_router
 from app.routes.recommend import router as recommend_router
 from app.routes.watch_history import router as watch_history_router
 from app.routes.search_history import router as search_history_router
+from app.routes.admin import router as admin_router
 from app.services.tmdb.movies import (
     get_trending_movies,
     get_top_rated_movies,
@@ -43,6 +44,7 @@ app.include_router(movies_router)
 app.include_router(recommend_router)
 app.include_router(watch_history_router)
 app.include_router(search_history_router)
+app.include_router(admin_router)
 
 
 @app.on_event("startup")
