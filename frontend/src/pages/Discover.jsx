@@ -26,6 +26,8 @@ export default function Discover() {
   const [activeLanguage, setActiveLanguage] = useState(null);
 
   const [movies, setMovies] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [filtersLoading, setFiltersLoading] = useState(true);
 
@@ -51,8 +53,18 @@ export default function Discover() {
     loadFilters();
   }, []);
 
-  // Re-run the search whenever a filter changes
+  // Reset pagination when the user changes discovery filters.
   useEffect(() => {
+    setPage(1);
+    setMovies([]);
+    setHasMore(true);
+  }, [activeMood, activeGenres, activeLanguage]);
+
+  // Load one TMDB page at a time; append results instead of limiting
+  // discovery to the first 20 movies.
+  useEffect(() => {
+    let cancelled = false;
+
     async function runSearch() {
       setLoading(true);
       try {
@@ -60,18 +72,23 @@ export default function Discover() {
           mood: activeMood,
           genres: activeGenres,
           language: activeLanguage,
+          page,
         });
-        setMovies(data);
+        if (cancelled) return;
+        setMovies((previous) => page === 1 ? data : [...previous, ...data]);
+        setHasMore(data.length === 20 && page < 500);
       } catch (err) {
         console.error(err);
-        setMovies([]);
+        if (!cancelled && page === 1) setMovies([]);
+        if (!cancelled) setHasMore(false);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     runSearch();
-  }, [activeMood, activeGenres, activeLanguage]);
+    return () => { cancelled = true; };
+  }, [activeMood, activeGenres, activeLanguage, page]);
 
   const toggleGenre = (id) => {
     setActiveGenres((prev) =>
@@ -224,6 +241,7 @@ export default function Discover() {
             </p>
           </div>
         ) : (
+          <>
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
             {movies.map((movie) => (
               <div
@@ -235,6 +253,19 @@ export default function Discover() {
               </div>
             ))}
           </div>
+          {hasMore && (
+            <div className="mt-10 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={loading}
+                className="rounded-full border border-white/15 bg-white/5 px-7 py-3 text-sm font-semibold text-white transition hover:border-[var(--dc-lime)] hover:text-[var(--dc-lime)] disabled:cursor-wait disabled:opacity-50"
+              >
+                {loading ? "Loading movies..." : "Load more movies"}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </section>
     </div>
