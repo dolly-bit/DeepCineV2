@@ -100,36 +100,21 @@ export default function Home() {
 
       <DashboardHero movies={trending} />
 
-      <section className="max-w-7xl mx-auto px-6 mt-10">
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-purple-600/15 via-white/5 to-cyan-500/10 p-5 sm:p-6">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-purple-300">
-            DeepCine
-          </p>
-          <h2 className="mt-1.5 text-xl sm:text-2xl font-semibold text-white">
-            A personalized movie recommendation system
-          </h2>
-          <p className="mt-1.5 max-w-3xl text-xs text-slate-300">
-            {userId
-              ? "Your picks below are being generated live from your watch history and search activity."
-              : "Sign up and start watching to unlock recommendations built just for you."}
-          </p>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {HOW_IT_WORKS.map(({ icon: Icon, title, description }) => (
-              <div
-                key={title}
-                className="rounded-xl border border-white/10 bg-black/20 p-3"
-              >
-                <Icon size={15} className="text-purple-300" />
-                <p className="mt-2 text-xs font-semibold text-white">
-                  {title}
-                </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                  {description}
-                </p>
-              </div>
-            ))}
-          </div>
+      <section className="dc-how-section" id="how-it-works">
+        <div className="dc-how-intro">
+          <span className="dc-slider-eyebrow">A LITTLE MORE YOU</span>
+          <h2>Not another endless<br /><em>scrolling session.</em></h2>
+          <p>{userId ? "Your viewing activity helps shape a more relevant mix of films over time." : "Start with a few films you love. DeepCine brings discovery, your watchlist and recommendations into one place."}</p>
+        </div>
+        <div className="dc-how-grid">
+          {HOW_IT_WORKS.map(({ icon: Icon, title, description }, index) => (
+            <article key={title} className="dc-how-card">
+              <span className="dc-how-index">0{index + 1}</span>
+              <Icon size={19} />
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
         </div>
       </section>
 
