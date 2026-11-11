@@ -1,172 +1,92 @@
-from collections import Counter
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import (
-    WatchHistory,
-    SearchHistory,
-    Movie,
-    MovieGenre,
-)
+from app.models import WatchHistory, Movie, MovieGenre
 from ai import collaborative
+from ai.recommender import recommend_for_user_content
+from ai.ranking import reciprocal_rank_fusion
 
 
-def get_personalized_recommendations(user_id: int, db: Session):
+def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20):
+    """Fuse content, ALS, genre-affinity and popularity candidate rankings.
+
+    Reciprocal-rank fusion is used because FAISS distances, ALS dot products
+    and TMDB popularity are not calibrated to a shared numeric scale.
     """
-    Hybrid personalization pipeline, tried in order:
+    history = db.query(WatchHistory).filter(
+        WatchHistory.user_id == user_id
+    ).order_by(WatchHistory.watched_at.desc()).all()
+    watched_tmdb_ids = {event.tmdb_id for event in history}
+    watched_db_ids = set()
 
-      1. Collaborative filtering (ALS matrix factorization on watch-history
-         interactions across ALL users) - the strongest signal once a user
-         has enough history, because it captures "people like you also
-         watched..." patterns that content/genre features can't see.
+    if watched_tmdb_ids:
+        watched_db_ids = {
+            movie.id for movie in db.query(Movie).filter(
+                Movie.tmdb_id.in_(watched_tmdb_ids)
+            ).all()
+        }
 
-      2. Genre-affinity heuristic - a lighter-weight fallback for users the
-         CF model hasn't learned about yet (e.g. trained before they signed
-         up, or too few interactions to be reliable).
-
-      3. Global popularity - cold-start fallback for brand-new users with
-         no history at all.
-    """
-
-    # --------------------------------------------------
-    # 0. Try genuine collaborative filtering first
-    # --------------------------------------------------
-
-    cf_recommendations = collaborative.recommend_for_user(
-        user_id,
-        top_k=20,
-    )
-
-    if cf_recommendations:
-        return cf_recommendations
-
-    # --------------------------------------------------
-    # 1. Get user's watch history
-    # --------------------------------------------------
-
-    history = (
-        db.query(WatchHistory)
-        .filter(WatchHistory.user_id == user_id)
-        .order_by(WatchHistory.watched_at.desc())
-        .all()
-    )
-
-    # --------------------------------------------------
-    # 2. Cold-start fallback
-    # --------------------------------------------------
-
-    if not history:
-
-        return (
-            db.query(Movie)
-            .filter(Movie.vote_average.isnot(None))
-            .order_by(
-                Movie.popularity.desc(),
-                Movie.vote_average.desc()
-            )
-            .limit(20)
-            .all()
-        )
-
-    # --------------------------------------------------
-    # 3. Get watched TMDB IDs
-    # --------------------------------------------------
-
-    watched_tmdb_ids = [
-        h.tmdb_id
-        for h in history
+    content = recommend_for_user_content(user_id, db, top_k=100)
+    collaborative_ranking = [
+        tmdb_id for tmdb_id, _score
+        in collaborative.recommendation_scores_for_user(user_id, top_k=100)
     ]
 
-    # --------------------------------------------------
-    # 4. Get watched movies from database
-    # --------------------------------------------------
+    genre_ranking = []
+    if watched_db_ids:
+        rows = db.query(MovieGenre.genre_id).filter(
+            MovieGenre.movie_id.in_(watched_db_ids)
+        ).all()
+        counts = {}
+        for (genre_id,) in rows:
+            counts[genre_id] = counts.get(genre_id, 0) + 1
+        favorite_genres = sorted(
+            counts, key=counts.get, reverse=True
+        )[:5]
+        if favorite_genres:
+            genre_rows = (
+                db.query(Movie.tmdb_id)
+                .join(MovieGenre, MovieGenre.movie_id == Movie.id)
+                .filter(
+                    MovieGenre.genre_id.in_(favorite_genres),
+                    ~Movie.id.in_(watched_db_ids),
+                )
+                .group_by(Movie.id, Movie.tmdb_id, Movie.popularity)
+                .order_by(
+                    func.count(MovieGenre.genre_id).desc(),
+                    func.coalesce(Movie.popularity, 0).desc(),
+                )
+                .limit(100).all()
+            )
+            genre_ranking = [tmdb_id for (tmdb_id,) in genre_rows]
 
-    watched_movies = (
-        db.query(Movie)
-        .filter(
-            Movie.tmdb_id.in_(watched_tmdb_ids)
-        )
-        .all()
+    popular_query = db.query(Movie)
+    if watched_db_ids:
+        popular_query = popular_query.filter(~Movie.id.in_(watched_db_ids))
+    popular = popular_query.order_by(
+        func.coalesce(Movie.popularity, 0).desc(),
+        func.coalesce(Movie.vote_average, 0).desc(),
+    ).limit(100).all()
+    popularity_ranking = [movie.tmdb_id for movie in popular]
+
+    fused_ids = reciprocal_rank_fusion(
+        {
+            "content": content,
+            "collaborative": collaborative_ranking,
+            "genre": genre_ranking,
+            "popularity": popularity_ranking,
+        },
+        weights={
+            "content": 1.0,
+            "collaborative": 1.0,
+            "genre": 0.65,
+            "popularity": 0.25,
+        },
+        top_k=top_k,
     )
+    if not fused_ids:
+        return []
 
-    if not watched_movies:
-
-        return (
-            db.query(Movie)
-            .order_by(Movie.popularity.desc())
-            .limit(20)
-            .all()
-        )
-
-    watched_movie_ids = [
-        movie.id
-        for movie in watched_movies
-    ]
-
-    # --------------------------------------------------
-    # 5. Find user's favorite genres
-    # --------------------------------------------------
-
-    genre_counter = Counter()
-
-    for movie in watched_movies:
-
-        movie_genres = (
-            db.query(MovieGenre)
-            .filter(
-                MovieGenre.movie_id == movie.id
-            )
-            .all()
-        )
-
-        for relation in movie_genres:
-            genre_counter[relation.genre_id] += 1
-
-    # --------------------------------------------------
-    # 6. If no genre data exists
-    # --------------------------------------------------
-
-    if not genre_counter:
-
-        return (
-            db.query(Movie)
-            .filter(
-                ~Movie.id.in_(watched_movie_ids)
-            )
-            .order_by(
-                Movie.popularity.desc(),
-                Movie.vote_average.desc()
-            )
-            .limit(20)
-            .all()
-        )
-
-    # --------------------------------------------------
-    # 7. Select top genres
-    # --------------------------------------------------
-
-    favorite_genres = [
-        genre_id
-        for genre_id, count
-        in genre_counter.most_common(3)
-    ]
-
-    # --------------------------------------------------
-    # 8. Recommend unseen movies
-    # --------------------------------------------------
-
-    recommendations = (
-        db.query(Movie)
-        .join(MovieGenre)
-        .filter(
-            MovieGenre.genre_id.in_(favorite_genres),
-            ~Movie.id.in_(watched_movie_ids),
-        )
-        .order_by(
-            Movie.popularity.desc(),
-            Movie.vote_average.desc()
-        )
-        .limit(20)
-        .all()
-    )
-
-    return recommendations
+    movies = db.query(Movie).filter(Movie.tmdb_id.in_(fused_ids)).all()
+    by_tmdb_id = {movie.tmdb_id: movie for movie in movies}
+    return [by_tmdb_id[mid] for mid in fused_ids if mid in by_tmdb_id]
