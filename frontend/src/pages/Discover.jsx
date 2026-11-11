@@ -35,10 +35,6 @@ export default function Discover() {
   },[]);
 
   useEffect(()=>{
-    setPage(1);setMovies([]);setHasMore(true);setError("");
-  },[activeMood,activeGenres,activeLanguage,sortBy]);
-
-  useEffect(()=>{
     let cancelled=false;
     async function search(){
       setLoading(true);setError("");
@@ -54,8 +50,10 @@ export default function Discover() {
     search();return()=>{cancelled=true;};
   },[activeMood,activeGenres,activeLanguage,sortBy,page]);
 
-  const toggleGenre=id=>setActiveGenres(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);
-  const clearAll=()=>{setActiveMood(null);setActiveGenres([]);setActiveLanguage(null);setSortBy("popularity.desc");};
+  const resetResults=()=>{setPage(1);setMovies([]);setHasMore(true);setError("");};
+  const toggleMood=mood=>{resetResults();setActiveMood(current=>current===mood?null:mood);};
+  const toggleGenre=id=>{resetResults();setActiveGenres(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);};
+  const clearAll=()=>{resetResults();setActiveMood(null);setActiveGenres([]);setActiveLanguage(null);setSortBy("popularity.desc");};
   const activeGenreNames=useMemo(()=>genres.filter(g=>activeGenres.includes(g.id)).map(g=>g.name),[genres,activeGenres]);
   const selectionCount=(activeMood?1:0)+activeGenres.length+(activeLanguage?1:0);
   const selectedMood=moods.find(m=>m.key===activeMood);
@@ -76,7 +74,7 @@ export default function Discover() {
         <section className="dc-discover-builder">
           <div className="dc-builder-heading"><div><span className="dc-discover-step">STEP 01 / THE FEELING</span><h2>Choose your mood</h2><p>Start with the kind of night you want.</p></div><span className="dc-builder-optional">PICK ONE</span></div>
           <div className="dc-mood-picker">
-            {moods.map(m=>{const meta=MOOD_META[m.key]||{icon:"✦",note:m.description||"Explore this mood",color:"cyan"};return <button key={m.key} title={m.description} onClick={()=>setActiveMood(current=>current===m.key?null:m.key)} className={`dc-mood-choice tone-${meta.color}${activeMood===m.key?" chosen":""}`} aria-pressed={activeMood===m.key}>
+            {moods.map(m=>{const meta=MOOD_META[m.key]||{icon:"✦",note:m.description||"Explore this mood",color:"cyan"};return <button key={m.key} title={m.description} onClick={()=>toggleMood(m.key)} className={`dc-mood-choice tone-${meta.color}${activeMood===m.key?" chosen":""}`} aria-pressed={activeMood===m.key}>
               <span className="dc-mood-icon">{meta.icon}</span><span className="dc-mood-name">{m.label}</span><span className="dc-mood-note">{meta.note}</span><span className="dc-mood-check">{activeMood===m.key?"✓":"＋"}</span>
             </button>;})}
             {loadingFilters&&Array.from({length:8}).map((_,i)=><div className="dc-mood-loading" key={i}/>)}
@@ -92,8 +90,8 @@ export default function Discover() {
           <div className="dc-builder-divider"/>
           <div className="dc-builder-heading dc-preference-heading"><div><span className="dc-discover-step">STEP 03 / MAKE IT YOURS</span><h2>Fine-tune the evening</h2><p>A couple of details to narrow the search.</p></div></div>
           <div className="dc-preference-row">
-            <label className="dc-preference-control"><span><Languages size={15}/> Language</span><select value={activeLanguage||""} onChange={e=>setActiveLanguage(e.target.value||null)}><option value="">Any language</option>{languages.map(l=><option key={l.code} value={l.code}>{l.label}</option>)}</select><ChevronDown size={14}/></label>
-            <label className="dc-preference-control"><span><Clapperboard size={15}/> Sort collection</span><select value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="popularity.desc">Most popular</option><option value="vote_average.desc">Highest rated</option><option value="primary_release_date.desc">Newest releases</option><option value="revenue.desc">Biggest hits</option></select><ChevronDown size={14}/></label>
+            <label className="dc-preference-control"><span><Languages size={15}/> Language</span><select value={activeLanguage||""} onChange={e=>{resetResults();setActiveLanguage(e.target.value||null);}}><option value="">Any language</option>{languages.map(l=><option key={l.code} value={l.code}>{l.label}</option>)}</select><ChevronDown size={14}/></label>
+            <label className="dc-preference-control"><span><Clapperboard size={15}/> Sort collection</span><select value={sortBy} onChange={e=>{resetResults();setSortBy(e.target.value);}}><option value="popularity.desc">Most popular</option><option value="vote_average.desc">Highest rated</option><option value="primary_release_date.desc">Newest releases</option><option value="revenue.desc">Biggest hits</option></select><ChevronDown size={14}/></label>
           </div>
 
           <div className="dc-selection-summary">
