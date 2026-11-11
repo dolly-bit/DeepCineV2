@@ -19,7 +19,7 @@ export default function MoviesListPage(){
           const result=!id?[]:mode==="recommended"?await getPersonalizedRecommendations(id):await getCollaborativeRecommendations(id);
           if(!cancelled){setMovies(result||[]);setHasMore(false);} return;
         }
-        const sortBy=mode==="top-rated"?"vote_average.desc":mode==="upcoming"?"primary_release_date.asc":"popularity.desc";
+        const sortBy=mode==="top-rated"?"vote_average.desc":mode==="upcoming"?"primary_release_date.asc":mode==="recent"?"primary_release_date.desc":"popularity.desc";
         const batches=await Promise.all([1,2,3,4,5].map(page=>discoverMovies({sortBy,page})));
         if(cancelled)return;
         const unique=new Map();batches.flat().forEach(m=>{if(m.id&&!unique.has(m.id))unique.set(m.id,m);});
