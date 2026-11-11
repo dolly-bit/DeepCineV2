@@ -25,3 +25,4 @@ huggingface-hub==0.14.1
 scipy==1.11.4
 implicit==0.7.2
 pandas==2.3.3
+threadpoolctl==3.6.0
