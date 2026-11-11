@@ -89,7 +89,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Create `backend/.env` (never commit it):
+Copy `backend/.env.example` to `backend/.env` and replace the placeholders (never commit the real `.env`):
 
 ```dotenv
 DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/deepcine
@@ -129,7 +129,7 @@ cd frontend
 npm ci
 ```
 
-Create `frontend/.env`:
+Copy `frontend/.env.example` to `frontend/.env`:
 
 ```dotenv
 VITE_API_BASE_URL=http://127.0.0.1:8000
@@ -191,7 +191,7 @@ Important interpretation limits:
 - Startup currently creates missing tables with SQLAlchemy metadata. A production deployment should use versioned Alembic migrations rather than relying on `create_all`.
 - External TMDB availability, rate limits, credentials, and hosting sleep affect live catalog features.
 
-## Attribution
+## Portfolio walkthrough\n\nUse [PORTFOLIO_DEMO.md](./PORTFOLIO_DEMO.md) as a repeatable live-demo checklist and evidence-capture guide.\n\n## Attribution
 
 Movie metadata and images are provided by [The Movie Database (TMDB)](https://www.themoviedb.org/). DeepCine is an independent project and is not endorsed or certified by TMDB. MovieLens data is provided by [GroupLens](https://grouplens.org/datasets/movielens/); follow the dataset's terms of use.
 
