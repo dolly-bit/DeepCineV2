@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Play, Sparkles } from "lucide-react";
+import { ArrowUpRight, Info, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import BackdropImage from "../ui/BackdropImage";
 
@@ -9,28 +9,50 @@ export default function DashboardHero({ movies = [] }) {
 
   useEffect(() => {
     if (movies.length < 2) return undefined;
-    const interval = window.setInterval(() => setCurrent((value) => (value + 1) % movies.length), 6500);
+    const interval = window.setInterval(() => setCurrent((value) => (value + 1) % Math.min(movies.length, 8)), 8000);
     return () => window.clearInterval(interval);
   }, [movies.length]);
 
   if (!movies.length) {
-    return <section className="dc-dashboard-hero dc-dashboard-empty"><div><span className="dc-landing-kicker"><Sparkles size={14} /> YOUR PERSONAL SCREENING ROOM</span><h1>Tonight deserves<br /><em>a better story.</em></h1><p>We're bringing your featured films into focus. Explore the catalogue while they load.</p><button onClick={() => navigate("/discover")}>Explore films <ArrowUpRight size={16} /></button></div></section>;
+    return (
+      <section className="dc-feature-hero dc-feature-hero-empty">
+        <div className="dc-feature-shade" />
+        <div className="dc-feature-copy">
+          <span className="dc-feature-kicker">YOUR NEXT FAVORITE FILM IS WAITING</span>
+          <h1>Find your<br />next <em>story.</em></h1>
+          <p>Explore a catalogue of films and let DeepCine help you find what to watch next.</p>
+          <button className="dc-hero-primary" onClick={() => navigate("/discover")}><Play size={16} fill="currentColor" /> Explore movies</button>
+        </div>
+      </section>
+    );
   }
 
   const movie = movies[current % movies.length];
+  const year = movie.release_date ? movie.release_date.slice(0, 4) : null;
   return (
-    <section className="dc-dashboard-hero">
-      <BackdropImage src={movie.backdrop_url || movie.poster_url} title={movie.title} className="dc-dashboard-image" />
-      <div className="dc-dashboard-overlay" />
-      <div className="dc-dashboard-content">
-        <span className="dc-landing-kicker"><Sparkles size={14} /> YOUR PERSONAL SCREENING ROOM</span>
-        <p className="dc-dashboard-label">FEATURED FILM <span> / {String(current + 1).padStart(2, "0")}</span></p>
+    <section className="dc-feature-hero">
+      <BackdropImage src={movie.backdrop_url || movie.poster_url} title={movie.title} className="dc-feature-backdrop" />
+      <div className="dc-feature-shade" />
+      <div className="dc-feature-copy" key={movie.id}>
+        <span className="dc-feature-kicker">DEEPCINE PRESENTS <i /> FEATURED FILM</span>
         <h1>{movie.title}</h1>
-        <div className="dc-dashboard-meta"><span>★ {movie.vote_average?.toFixed?.(1) ?? "—"}</span><span>{movie.release_date?.slice(0, 4) || "Release date unavailable"}</span></div>
-        <p className="dc-dashboard-overview">{movie.overview || "A new story is waiting to be discovered."}</p>
-        <div className="dc-dashboard-actions"><button onClick={() => navigate(`/movie/${movie.id}`)}><Play size={15} fill="currentColor" /> Explore film</button><button className="dc-dashboard-secondary" onClick={() => navigate("/discover")}>Browse catalogue <ArrowUpRight size={15} /></button></div>
+        <div className="dc-feature-meta">
+          {movie.vote_average ? <span className="dc-feature-rating">★ {movie.vote_average.toFixed(1)} / 10</span> : null}
+          {year && <span>{year}</span>}
+          <span>Film</span>
+        </div>
+        <p>{movie.overview || "A story worth discovering. Explore the film to see more details."}</p>
+        <div className="dc-feature-actions">
+          <button className="dc-hero-primary" onClick={() => navigate(`/movie/${movie.id}`)}><Play size={17} fill="currentColor" /> Explore film</button>
+          <button className="dc-hero-secondary" onClick={() => navigate(`/movie/${movie.id}`)}><Info size={17} /> More Info</button>
+        </div>
       </div>
-      <div className="dc-dashboard-pagination">{movies.slice(0, 6).map((item, index) => <button key={item.id} aria-label={`Show ${item.title}`} onClick={() => setCurrent(index)} className={index === current ? "active" : ""} />)}</div>
+      <div className="dc-feature-pagination" aria-label="Featured films">
+        {movies.slice(0, 8).map((item, index) => (
+          <button key={item.id} type="button" aria-label={`Show ${item.title}`} onClick={() => setCurrent(index)} className={index === current ? "active" : ""} />
+        ))}
+      </div>
+      <button className="dc-feature-discover" onClick={() => navigate("/discover")}>Explore catalogue <ArrowUpRight size={15} /></button>
     </section>
   );
 }
