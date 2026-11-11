@@ -176,31 +176,72 @@ def ndcg_at_k(recommended, relevant, k):
     return dcg / idcg if idcg else 0.0
 
 
-def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks):
+def per_user_ranking_metrics(rankings, relevant_by_user, k):
+    """Return aligned per-user metrics for paired statistical comparisons."""
+    return {
+        user: {
+            "precision": precision_at_k(rankings.get(user, [])[:k], relevant, k),
+            "recall": recall_at_k(rankings.get(user, [])[:k], relevant, k),
+            "ndcg": ndcg_at_k(rankings.get(user, [])[:k], relevant, k),
+        }
+        for user, relevant in relevant_by_user.items() if relevant
+    }
+
+
+def bootstrap_mean_ci(values, seed=42, samples=1000, confidence=0.95):
+    """Percentile bootstrap confidence interval for a mean."""
+    values = np.asarray(list(values), dtype=float)
+    if not len(values):
+        return {"lower": 0.0, "upper": 0.0}
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(values), size=(samples, len(values)))
+    means = values[indices].mean(axis=1)
+    alpha = (1.0 - confidence) / 2.0
+    return {
+        "lower": round(float(np.quantile(means, alpha)), 6),
+        "upper": round(float(np.quantile(means, 1.0 - alpha)), 6),
+    }
+
+
+def paired_bootstrap_difference_ci(left, right, metric, seed=42, samples=1000):
+    """CI for left-minus-right using paired resampling of the same users."""
+    users = sorted(set(left) & set(right))
+    if not users:
+        return {"lower": 0.0, "upper": 0.0}
+    differences = [left[user][metric] - right[user][metric] for user in users]
+    return bootstrap_mean_ci(differences, seed=seed, samples=samples)
+
+
+def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstrap_seed=42):
     users = [u for u, items in relevant_by_user.items() if items]
     output = {}
     for k in ks:
-        rows, recommended_union = [], set()
-        for user in users:
-            recs = rankings.get(user, [])[:k]
-            relevant = relevant_by_user[user]
-            rows.append((
-                precision_at_k(recs, relevant, k),
-                recall_at_k(recs, relevant, k),
-                ndcg_at_k(recs, relevant, k),
-            ))
-            recommended_union.update(recs)
-        means = np.asarray(rows, dtype=float).mean(axis=0) if rows else np.zeros(3)
+        per_user = per_user_ranking_metrics(rankings, relevant_by_user, k)
+        rows = list(per_user.values())
+        recommended_union = {
+            item for user in users for item in rankings.get(user, [])[:k]
+        }
+        means = np.asarray([
+            [row["precision"], row["recall"], row["ndcg"]] for row in rows
+        ], dtype=float).mean(axis=0) if rows else np.zeros(3)
         output[str(k)] = {
             "precision": round(float(means[0]), 6),
             "recall": round(float(means[1]), 6),
             "ndcg": round(float(means[2]), 6),
+            "precision_ci95": bootstrap_mean_ci(
+                (row["precision"] for row in rows), seed=bootstrap_seed + k
+            ),
+            "recall_ci95": bootstrap_mean_ci(
+                (row["recall"] for row in rows), seed=bootstrap_seed + 100 + k
+            ),
+            "ndcg_ci95": bootstrap_mean_ci(
+                (row["ndcg"] for row in rows), seed=bootstrap_seed + 200 + k
+            ),
             "coverage": round(len(recommended_union) / len(candidate_catalog), 6)
             if candidate_catalog else 0.0,
             "users_evaluated": len(users),
         }
     return output
-
 
 def _normalize_rows(matrix):
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
