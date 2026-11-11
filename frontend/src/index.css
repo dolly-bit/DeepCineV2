@@ -1497,3 +1497,9 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
   background:linear-gradient(135deg,rgba(54,220,232,.2),rgba(22,141,187,.2));
   color:#65e9ef;
 }
+
+.dc-movie-collection-tabs { flex-wrap:wrap; }
+@media(max-width:640px) {
+  .dc-movie-collection-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dc-movie-collection-tabs button { text-align:center; }
+}
