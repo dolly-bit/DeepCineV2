@@ -15,7 +15,7 @@ The script streams MovieLens ratings, maps movie IDs to the current DeepCine cat
 - Per-user chronological 60/20/20 train/validation/test split. Users need at least three positive catalog interactions.
 - ALS, content user profiles, popularity counts, and genre profiles are built from training interactions only.
 - Baselines: global training popularity, personalized popularity using training-derived genre affinity, content, ALS collaborative.
-- RRF weights are selected by a deterministic grid search using validation NDCG@10 (or the largest requested K if K=10 is absent).
+- RRF weights are selected from an 81-point deterministic grid using validation NDCG@10 (or the largest requested K if K=10 is absent). Tuning uses a seeded uniform sample of up to 2,000 validation users for runtime control; validation and test reporting still use all eligible users.
 - The held-out test partition is used only for final reporting; it does not select weights.
 - ALS uses a fixed seed and BLAS thread pools are limited to one during fitting/scoring.
 - JSON and CSV include split sizes, tuning configuration, validation metrics, and final test metrics.
