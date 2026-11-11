@@ -600,8 +600,8 @@ def run(args):
                 "test_seed": args.test_seed,
                 "model_fit_train_users": len(train),
                 "model_fit_train_interactions": sum(map(len, train.values())),
-                "evaluation_validation_interactions": sum(map(len, validation.values())),
-                "evaluation_test_interactions": sum(map(len, test.values())),
+                "all_validation_interactions": sum(map(len, validation.values())),
+                "all_test_interactions": sum(map(len, test.values())),
             },
             "reproducibility": {
                 "validation_seed": args.validation_seed,
@@ -618,7 +618,7 @@ def run(args):
             "evaluation": {
                 "metrics": ["precision", "recall", "ndcg", "coverage"],
                 "ks": args.ks,
-                "averaging": "macro average over the seeded sampled evaluation users",
+                "averaging": "macro average over each independently sampled cohort",
                 "coverage_denominator": "MovieLens/DeepCine overlapping catalog",
                 "model_fit_data": "full eligible training partition",
                 "weight_selection_data": "validation partition only",
@@ -650,7 +650,7 @@ def run(args):
 
         json_path = OUTPUT_DIR / f"movielens_phase5_{timestamp}.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        csv_path = OUTPUT_DIR / f"movielens_phase4_{timestamp}.csv"
+        csv_path = OUTPUT_DIR / f"movielens_phase5_{timestamp}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow([
@@ -685,7 +685,7 @@ def parse_args():
     parser.add_argument("--chunksize", type=int, default=500_000)
     parser.add_argument("--ks", default="5,10,20")
     parser.add_argument("--als-factors", type=int, default=64)
-    parser.add_argument("--seed", type=int, default=42, help="legacy seed; fallback for all phase-4 seeds")
+    parser.add_argument("--seed", type=int, default=42, help="legacy seed; fallback for validation, ALS, tuning, and bootstrap seeds")
     parser.add_argument("--validation-seed", type=int, default=None)
     parser.add_argument("--test-seed", type=int, default=None)
     parser.add_argument("--als-seed", type=int, default=None)
