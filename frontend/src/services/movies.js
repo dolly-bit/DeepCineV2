@@ -176,3 +176,39 @@ export const discoverMovies = async ({ mood, genres, language, sortBy, page = 1 
       },
     })
   );
+
+// User feedback: explicit 1-5 star ratings and a persistent personal watchlist.
+export const saveMovieRating = async (tmdbId, rating) => {
+  const response = await api.put("/ratings/", {
+    tmdb_id: tmdbId,
+    rating,
+  });
+  return response.data;
+};
+
+export const getMyRatings = async () => {
+  const response = await api.get("/ratings/mine");
+  return response.data || [];
+};
+
+export const deleteMovieRating = async (tmdbId) => {
+  const response = await api.delete(`/ratings/${tmdbId}`);
+  return response.data;
+};
+
+export const getWatchlist = async () => {
+  const response = await api.get("/watchlist/");
+  return response.data || [];
+};
+
+export const addToWatchlist = async (tmdbId) => {
+  const response = await api.post("/watchlist/", {
+    tmdb_id: tmdbId,
+  });
+  return response.data;
+};
+
+export const removeFromWatchlist = async (tmdbId) => {
+  const response = await api.delete(`/watchlist/${tmdbId}`);
+  return response.data;
+};
