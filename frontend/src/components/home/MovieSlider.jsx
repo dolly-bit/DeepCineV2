@@ -11,7 +11,7 @@ export default function MovieSlider({ title = "Movies", movies = [], loading, se
   return (
     <section className="dc-slider-section">
       <div className="dc-slider-heading">
-        <div><span className="dc-slider-eyebrow">THE COLLECTION</span><h2>{title}</h2></div>
+        <div><span className="dc-slider-eyebrow">THE COLLECTION</span>{seeMoreState ? <button type="button" className="dc-slider-title-link" onClick={() => navigate("/movies", { state: seeMoreState })} aria-label={`Open full ${title} collection`}><h2>{title}</h2></button> : <h2>{title}</h2>}</div>
         <div className="dc-slider-controls">
           {seeMoreState && <button className="dc-view-all" onClick={() => navigate("/movies", { state: seeMoreState })}>View all <ArrowRight size={14} /></button>}
           <button aria-label="Scroll left" onClick={() => scroll(-1)}><ChevronLeft size={17} /></button>
