@@ -4,7 +4,7 @@ import { ChevronLeft,LoaderCircle } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import HomeSidebar from "../components/layout/HomeSidebar";
 import MovieCard from "../components/home/MovieCard";
-import { discoverMovies,getPersonalizedRecommendations,getCollaborativeRecommendations } from "../services/movies";
+import { discoverMovies,getPersonalizedRecommendations,getCollaborativeRecommendations,getUpcomingMovies } from "../services/movies";
 export default function MoviesListPage(){
   const location=useLocation(),navigate=useNavigate();
   const [mode,setMode]=useState(location.state?.mode||"recent");
@@ -15,6 +15,14 @@ export default function MoviesListPage(){
     async function load(){
       setLoading(true);setError("");setMovies([]);setPage(0);setHasMore(true);
       try{
+        if(mode==="upcoming"){
+          const upcoming=await getUpcomingMovies();
+          if(cancelled)return;
+          const today=new Date().toISOString().slice(0,10);
+          const results=(upcoming||[]).filter(m=>m.release_date&&m.release_date>=today)
+            .sort((a,b)=>a.release_date.localeCompare(b.release_date));
+          setMovies(results);setHasMore(false);return;
+        }
         if(mode==="recommended"||mode==="collaborative"){
           const id=localStorage.getItem("user_id");
           const result=!id?[]:mode==="recommended"?await getPersonalizedRecommendations(id):await getCollaborativeRecommendations(id);
@@ -30,7 +38,7 @@ export default function MoviesListPage(){
           results=results.filter(m=>m.release_date&&m.release_date>=today)
             .sort((a,b)=>a.release_date.localeCompare(b.release_date));
         }
-        setMovies(results);setPage(5);setHasMore(mode==="upcoming"?results.length>0:unique.size>=100);
+        setMovies(results);setPage(5);setHasMore(unique.size>=100);
       }catch(e){console.error(e);if(!cancelled)setError("Unable to load this movie collection.");}
       finally{if(!cancelled)setLoading(false);}
     }
