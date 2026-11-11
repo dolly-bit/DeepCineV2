@@ -4,6 +4,7 @@ from evaluate_movielens import (
     load_latest_ratings,
     load_movie_mapping,
     sample_evaluation_users,
+    select_ranking_users,
     tune_hybrid_weights,
 )
 
@@ -93,3 +94,16 @@ def test_evaluation_user_sample_rejects_non_positive_limit():
     import pytest
     with pytest.raises(ValueError):
         sample_evaluation_users({1, 2}, sample_size=0)
+
+
+
+def test_ranking_user_subset_does_not_change_training_population():
+    train = {1: {10}, 2: {20}, 3: {30}}
+    assert select_ranking_users(train, [3, 1]) == [1, 3]
+    assert len(train) == 3
+
+
+def test_ranking_user_subset_rejects_unknown_users():
+    import pytest
+    with pytest.raises(ValueError):
+        select_ranking_users({1: {10}}, [2])
