@@ -17,7 +17,7 @@ export default function TrendingMarquee({ movies = [], loading }) {
       ) : (
         <div className="dc-trending-empty">Trending titles are taking a moment to arrive. Please refresh in a little while.</div>
       )}
-      <button className="dc-trending-more" onClick={() => navigate("/login")}>Sign in to explore your picks <ArrowRight size={14} /></button>
+      <button className="dc-trending-more" onClick={() => navigate("/signup")}>Create your watchlist <ArrowRight size={14} /></button>
     </section>
   );
 }
