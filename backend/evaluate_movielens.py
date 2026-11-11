@@ -38,7 +38,8 @@ DEFAULT_WEIGHTS = {
     "genre": 0.65,
     "popularity": 0.25,
 }
-WEIGHT_GRID = (0.25, 0.5, 1.0, 2.0)
+WEIGHT_GRID = (0.5, 1.0, 2.0)
+TUNING_USER_SAMPLE_SIZE = 2_000
 
 
 def load_movie_mapping(links_path: str | Path, catalog_tmdb_ids: set[int]):
@@ -341,6 +342,11 @@ def fuse_hybrid(signal_rankings, weights, top_k):
 def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog):
     """Select RRF weights on validation NDCG@10 (or largest available K)."""
     objective_k = 10 if 10 in ks else max(ks)
+    # Tuning over every validation user for every grid point is needlessly
+    # expensive at MovieLens scale. Use a deterministic, sorted user sample;
+    # final validation/test reporting still uses every eligible user.
+    sampled_users = sorted(validation)[:TUNING_USER_SAMPLE_SIZE]
+    tuning_validation = {u: validation[u] for u in sampled_users}
     best = None
     tested = 0
     for values in itertools.product(WEIGHT_GRID, repeat=4):
@@ -348,7 +354,7 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog):
             ("content", "collaborative", "genre", "popularity"), values
         ))
         candidate = fuse_hybrid(signal_rankings, weights, max(ks) * 10)
-        metrics = evaluate_rankings(candidate, validation, candidate_catalog, [objective_k])
+        metrics = evaluate_rankings(candidate, tuning_validation, candidate_catalog, [objective_k])
         score = metrics[str(objective_k)]["ndcg"]
         tested += 1
         # Deterministic tie-break: NDCG, precision, then prefer lower total weight.
@@ -363,6 +369,8 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog):
         "weights": best["weights"],
         "weight_grid": list(WEIGHT_GRID),
         "configurations_tested": tested,
+        "tuning_users_sampled": len(sampled_users),
+        "tuning_user_sample_method": "first N users by sorted user ID; deterministic",
         "validation_metrics_at_objective_k": best["metrics"],
     }
 
