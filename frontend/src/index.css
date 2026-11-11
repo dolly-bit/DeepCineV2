@@ -647,3 +647,28 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 /* Keep movie hero geometry stable when a rating/watchlist action reports status. */
 .dc-movie-feedback { align-content:start; }
 .dc-movie-feedback .dc-feedback-message { display:block; flex:0 0 100%; min-height:14px; line-height:14px; margin:0; }
+
+
+/* Hard-lock the feedback panel dimensions; status text is an overlay, not layout content. */
+.dc-movie-feedback {
+  position:relative;
+  display:flex;
+  align-items:flex-start;
+  box-sizing:border-box;
+  height:96px;
+  min-height:96px;
+  max-height:96px;
+  overflow-anchor:none;
+}
+.dc-movie-feedback .dc-feedback-message {
+  position:absolute;
+  left:15px;
+  right:15px;
+  bottom:9px;
+  display:block;
+  flex:none;
+  min-height:14px;
+  margin:0;
+  line-height:14px;
+  pointer-events:none;
+}
