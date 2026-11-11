@@ -158,9 +158,9 @@ export default function SearchModal({ isOpen, onClose }) {
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#121212] to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#121212] to-transparent" />
 
-      <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-3">
+      <div className="dc-search-trending-track flex gap-4 overflow-x-auto scrollbar-hide pb-3">
         {trending.map((movie) => (
-          <div key={movie.id} onClick={onClose} className="shrink-0">
+          <div key={movie.id} onClick={onClose} className="dc-search-trending-item shrink-0">
             <MovieCard movie={movie} />
           </div>
         ))}
