@@ -227,7 +227,7 @@ export default function Discover() {
 
       {/* Results */}
       <section className="max-w-7xl mx-auto px-6 mt-8 pb-16">
-        {loading ? (
+        {loading && page === 1 ? (
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="h-[250px] animate-pulse rounded-2xl bg-zinc-800" />
