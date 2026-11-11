@@ -114,7 +114,7 @@ export default function MovieDetails() {
   return (
     <div className="min-h-screen bg-cm-bg text-white">
       {/* Backdrop */}
-      <div className="relative min-h-[680px] lg:min-h-[700px]">
+      <div className="dc-detail-hero relative min-h-[680px] lg:min-h-[700px]">
         <BackdropImage
           src={movie.backdrop_url}
           title={movie.title}
@@ -141,7 +141,7 @@ export default function MovieDetails() {
             <h1 className="text-3xl font-extrabold md:text-4xl">{movie.title}</h1>
 
             {movie.tagline && (
-              <p className="mt-2 text-base italic text-cm-violet">
+              <p className="mt-2 text-base italic text-dc-lime">
                 {movie.tagline}
               </p>
             )}
@@ -169,7 +169,7 @@ export default function MovieDetails() {
               {movie.genres?.map((genre) => (
                 <span
                   key={genre.id}
-                  className="rounded-full border border-cm-purple bg-cm-purple/20 px-3 py-1 text-xs"
+                  className="dc-detail-genre rounded-full px-3 py-1 text-xs"
                 >
                   {genre.name}
                 </span>
@@ -214,7 +214,7 @@ export default function MovieDetails() {
                   href={trailer}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cm-purple-deep to-cm-purple px-5 py-2.5 text-sm font-semibold transition hover:brightness-110"
+                  className="dc-detail-primary flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition hover:brightness-110"
                 >
                   <Play size={16} />
                   Watch Trailer
@@ -223,7 +223,7 @@ export default function MovieDetails() {
 
               <button
                 onClick={() => navigate(-1)}
-                className="rounded-xl bg-white/10 px-5 py-2.5 text-sm transition hover:bg-white/20"
+                className="dc-detail-secondary rounded-xl px-5 py-2.5 text-sm transition"
               >
                 Back
               </button>
@@ -233,7 +233,7 @@ export default function MovieDetails() {
       </div>
 
       {cast.length > 0 && (
-        <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="dc-detail-section mx-auto max-w-7xl px-6 py-8">
           <h2 className="mb-5 text-xl font-bold">🎭 Cast</h2>
 
           <div className="grid grid-cols-3 gap-4 md:grid-cols-5 lg:grid-cols-6">
@@ -245,7 +245,7 @@ export default function MovieDetails() {
       )}
 
       {similarMovies.length > 0 && (
-        <div className="mx-auto max-w-7xl px-6 pb-10">
+        <div className="dc-detail-section mx-auto max-w-7xl px-6 pb-10">
           <h2 className="mb-5 text-xl font-bold">🎬 Similar Movies</h2>
 
           <div className="relative">
