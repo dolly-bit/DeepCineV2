@@ -46,7 +46,8 @@ export default function MovieDetails() {
 
   const [movie, setMovie] = useState(null);
   const [trailer, setTrailer] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loadedMovieId, setLoadedMovieId] = useState(null);
+  const loading = loadedMovieId !== id;
   const [cast, setCast] = useState([]);
   const [similarMovies, setSimilarMovies] = useState([]);
 
@@ -74,7 +75,7 @@ export default function MovieDetails() {
         if (!cancelled) setMovie(null);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadedMovieId(id);
       });
 
     return () => {
