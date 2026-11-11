@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Search } from "lucide-react";
 
 import Navbar from "../components/layout/Navbar";
+import HomeSidebar from "../components/layout/HomeSidebar";
 import DashboardHero from "../components/home/DashboardHero";
 import RecommendationSection from "../components/RecommendationSection";
 import { getAuthState } from "../services/auth";
@@ -104,15 +105,17 @@ export default function RecommendPage() {
   }
 
   return (
-    <div className="min-h-screen bg-cm-bg font-sans">
+    <div className="dc-app-shell">
+      <HomeSidebar />
+      <main className="dc-app-main">
       <Navbar />
+      <div className="dc-ai-page">
+      <section className="dc-ai-intro"><span className="dc-discover-kicker"><Search size={13}/> DEEPCINE INTELLIGENCE</span><h1>Your next watch, <em>thoughtfully picked.</em></h1><p>Recommendations shaped by your taste, viewing patterns and the films you love.</p></section>
 
-      <DashboardHero movies={trending} />
-
-      <section className="mx-auto -mt-10 max-w-2xl px-6">
+      <section className="dc-ai-search-box">
         <form
           onSubmit={handleSearch}
-          className="flex items-center gap-2 rounded-xl border border-cm-line bg-cm-surface p-1.5 text-sm shadow-[0_14px_40px_rgba(8,7,12,0.6)] backdrop-blur"
+          className="dc-ai-search-form"
         >
           <Search size={15} className="ml-2 text-cm-muted" />
           <input
@@ -123,11 +126,11 @@ export default function RecommendPage() {
                 ? `Hi ${username} — search a movie to sharpen your recommendations...`
                 : "Search a movie to sharpen your recommendations..."
             }
-            className="flex-1 bg-transparent text-white outline-none placeholder:text-cm-muted"
+            className="dc-ai-search-input"
           />
           <button
             type="submit"
-            className="rounded-lg bg-gradient-to-r from-cm-purple-deep to-cm-purple px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+            className="dc-ai-search-button"
           >
             Search
           </button>
@@ -195,9 +198,9 @@ export default function RecommendPage() {
         description="Highest rated by audiences."
       />
 
-      <footer className="px-6 py-10 text-center text-xs text-cm-muted">
-        © 2026 DeepCine
-      </footer>
+      <footer className="dc-ai-footer">DEEPCINE · RECOMMENDATIONS THAT LEARN YOUR TASTE</footer>
+      </div>
+      </main>
     </div>
   );
 }
