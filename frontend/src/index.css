@@ -575,3 +575,46 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 @keyframes dc-trending-loop { from { transform:translateX(0); } to { transform:translateX(-50%); } }
 @media(max-width:520px) { .dc-trending-item { flex-basis:125px; width:125px; } .dc-trending-track.dc-trending-auto { gap:13px; animation-duration:36s; } }
 @media(prefers-reduced-motion:reduce) { .dc-trending-track.dc-trending-auto { animation:none; overflow-x:auto; } }
+
+
+/* Auth pages: fit the complete desktop experience within one viewport. */
+@media(min-width:851px) {
+  .auth-page { box-sizing:border-box; min-height:100svh; padding:14px clamp(22px,4.8vw,68px) 10px; }
+  .auth-topbar { flex:0 0 auto; }
+  .auth-layout { flex:1 0 auto; min-height:0; margin:8px auto 10px; gap:clamp(30px,5vw,72px); align-items:center; }
+  .auth-story { padding:0; }
+  .auth-kicker { padding:8px 12px; }
+  .auth-overline { margin-top:25px; }
+  .auth-story h1 { margin:10px 0 13px; font-size:clamp(48px,5.5vw,72px); line-height:.94; }
+  .auth-description { font-size:13px; line-height:1.65; }
+  .poster-orbit { height:190px; margin-top:18px; transform:scale(1.12); transform-origin:left top; }
+  .orbit-poster { width:122px; height:174px; }
+  .orbit-poster-1 { left:8px; }
+  .orbit-poster-2 { left:112px; top:22px; }
+  .orbit-poster-3 { left:220px; top:4px; }
+  .orbit-poster-4 { left:328px; top:20px; }
+  .orbit-center { left:170px; top:58px; }
+  .auth-story-foot { margin-top:0; font-size:10px; }
+  .auth-form-panel { padding:clamp(20px,2.2vw,30px); }
+  .auth-form-heading h2 { margin:11px 0 7px; font-size:clamp(24px,2.2vw,30px); }
+  .auth-form-heading p { font-size:11px; line-height:1.55; }
+  .auth-form { gap:12px; margin-top:17px; }
+  .auth-field { gap:6px; }
+  .auth-input-wrap { min-height:44px; }
+  .auth-input-wrap input { height:40px; }
+  .auth-submit { min-height:46px; margin-top:0; }
+  .auth-form-footer { margin-top:13px; padding-top:12px; }
+  .auth-legal { margin-top:9px; font-size:8px; }
+  .auth-bottom { flex:0 0 auto; padding-top:2px; font-size:8px; }
+}
+@media(min-width:851px) and (max-height:760px) {
+  .auth-page { padding-top:9px; padding-bottom:7px; }
+  .auth-story h1 { font-size:clamp(44px,5vw,62px); }
+  .poster-orbit { transform:scale(.94); height:165px; margin-top:12px; }
+  .auth-form-panel { padding:17px 22px; }
+  .auth-form { gap:9px; margin-top:12px; }
+  .auth-form-footer { margin-top:9px; padding-top:9px; }
+}
+@media(max-width:850px) {
+  .poster-orbit { transform:scale(.9); transform-origin:left top; margin-bottom:-18px; }
+}
