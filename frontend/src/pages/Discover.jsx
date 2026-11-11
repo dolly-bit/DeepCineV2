@@ -1,273 +1,115 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Sparkles, X } from "lucide-react";
-
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { SlidersHorizontal, Sparkles, X, RotateCcw, Film, Languages, Clapperboard, ChevronDown } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
+import HomeSidebar from "../components/layout/HomeSidebar";
 import MovieCard from "../components/home/MovieCard";
-import {
-  getMoods,
-  getGenres,
-  getLanguages,
-  discoverMovies,
-} from "../services/movies";
+import { getMoods, getGenres, getLanguages, discoverMovies } from "../services/movies";
+
+const MOOD_META = {
+  feel_good: { icon: "☀", note: "Warm, uplifting and easy to love", color: "gold" },
+  intense: { icon: "⚡", note: "High stakes. No slow moments.", color: "red" },
+  romantic: { icon: "♡", note: "Chemistry, connection and longing", color: "rose" },
+  scary: { icon: "☾", note: "Dark stories and edge-of-seat tension", color: "violet" },
+  mind_bending: { icon: "◈", note: "Twists that stay with you", color: "blue" },
+  emotional: { icon: "✦", note: "Stories that hit somewhere deep", color: "pink" },
+  chill: { icon: "〰", note: "A slower pace for a quieter night", color: "green" },
+  epic_adventure: { icon: "✧", note: "Big worlds and bigger journeys", color: "cyan" },
+};
 
 export default function Discover() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate=useNavigate(), location=useLocation();
+  const [moods,setMoods]=useState([]),[genres,setGenres]=useState([]),[languages,setLanguages]=useState([]);
+  const [activeMood,setActiveMood]=useState(location.state?.mood||null);
+  const [activeGenres,setActiveGenres]=useState(location.state?.genreId?[location.state.genreId]:[]);
+  const [activeLanguage,setActiveLanguage]=useState(null),[sortBy,setSortBy]=useState("popularity.desc");
+  const [movies,setMovies]=useState([]),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(true);
+  const [loading,setLoading]=useState(true),[loadingFilters,setLoadingFilters]=useState(true),[error,setError]=useState("");
 
-  const [moods, setMoods] = useState([]);
-  const [genres, setGenres] = useState([]);
-  const [languages, setLanguages] = useState([]);
+  useEffect(()=>{
+    let cancelled=false;
+    Promise.all([getMoods(),getGenres(),getLanguages()]).then(([m,g,l])=>{
+      if(cancelled)return;setMoods(m||[]);setGenres(g||[]);setLanguages(l||[]);
+    }).catch(err=>console.error("Discovery filters failed",err)).finally(()=>{if(!cancelled)setLoadingFilters(false);});
+    return()=>{cancelled=true;};
+  },[]);
 
-  // Pre-select a mood when arriving from the Home page's "Browse by
-  // mood" section (navigate("/discover", { state: { mood: key } })).
-  const [activeMood, setActiveMood] = useState(location.state?.mood || null);
-  const [activeGenres, setActiveGenres] = useState(location.state?.genreId ? [location.state.genreId] : []);
-  const [activeLanguage, setActiveLanguage] = useState(null);
+  useEffect(()=>{
+    setPage(1);setMovies([]);setHasMore(true);setError("");
+  },[activeMood,activeGenres,activeLanguage,sortBy]);
 
-  const [movies, setMovies] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [filtersLoading, setFiltersLoading] = useState(true);
-
-  // Load filter options once
-  useEffect(() => {
-    async function loadFilters() {
-      try {
-        const [m, g, l] = await Promise.all([
-          getMoods(),
-          getGenres(),
-          getLanguages(),
-        ]);
-        setMoods(m);
-        setGenres(g);
-        setLanguages(l);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setFiltersLoading(false);
-      }
+  useEffect(()=>{
+    let cancelled=false;
+    async function search(){
+      setLoading(true);setError("");
+      try{
+        const data=await discoverMovies({mood:activeMood,genres:activeGenres,language:activeLanguage,sortBy,page});
+        if(cancelled)return;
+        setMovies(previous=>page===1?data:[...previous,...data]);
+        setHasMore(data.length===20&&page<500);
+        if(page===1&&!data.length)setError("No titles matched this combination. Try changing one of your picks.");
+      }catch(err){console.error(err);if(!cancelled){setError("We couldn't load this selection. Please try again.");setHasMore(false);}}
+      finally{if(!cancelled)setLoading(false);}
     }
+    search();return()=>{cancelled=true;};
+  },[activeMood,activeGenres,activeLanguage,sortBy,page]);
 
-    loadFilters();
-  }, []);
+  const toggleGenre=id=>setActiveGenres(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);
+  const clearAll=()=>{setActiveMood(null);setActiveGenres([]);setActiveLanguage(null);setSortBy("popularity.desc");};
+  const activeGenreNames=useMemo(()=>genres.filter(g=>activeGenres.includes(g.id)).map(g=>g.name),[genres,activeGenres]);
+  const selectionCount=(activeMood?1:0)+activeGenres.length+(activeLanguage?1:0);
+  const selectedMood=moods.find(m=>m.key===activeMood);
 
-  // Reset pagination when the user changes discovery filters.
-  useEffect(() => {
-    setPage(1);
-    setMovies([]);
-    setHasMore(true);
-  }, [activeMood, activeGenres, activeLanguage]);
+  return <div className="dc-app-shell">
+    <HomeSidebar/>
+    <main className="dc-app-main">
+      <Navbar/>
+      <div className="dc-discover-page">
+        <section className="dc-discover-intro">
+          <div><span className="dc-discover-kicker"><Sparkles size={13}/> YOUR NEXT GREAT WATCH STARTS HERE</span>
+            <h1>What are we <em>watching</em> tonight?</h1>
+            <p>Build your own movie mood. Pick a feeling, mix genres, choose a language — DeepCine will shape the collection.</p>
+          </div>
+          <div className="dc-discover-stamp"><span>01</span><small>SET YOUR<br/>VIBE</small></div>
+        </section>
 
-  // Load one TMDB page at a time; append results instead of limiting
-  // discovery to the first 20 movies.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function runSearch() {
-      setLoading(true);
-      try {
-        const data = await discoverMovies({
-          mood: activeMood,
-          genres: activeGenres,
-          language: activeLanguage,
-          page,
-        });
-        if (cancelled) return;
-        setMovies((previous) => page === 1 ? data : [...previous, ...data]);
-        setHasMore(data.length === 20 && page < 500);
-      } catch (err) {
-        console.error(err);
-        if (!cancelled && page === 1) setMovies([]);
-        if (!cancelled) setHasMore(false);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    runSearch();
-    return () => { cancelled = true; };
-  }, [activeMood, activeGenres, activeLanguage, page]);
-
-  const toggleGenre = (id) => {
-    setActiveGenres((prev) =>
-      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
-    );
-  };
-
-  const clearAll = () => {
-    setActiveMood(null);
-    setActiveGenres([]);
-    setActiveLanguage(null);
-  };
-
-  const hasFilters = activeMood || activeGenres.length > 0 || activeLanguage;
-
-  return (
-    <div className="min-h-screen bg-cm-bg text-white">
-      <Navbar />
-
-      <section className="max-w-7xl mx-auto px-6 pt-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-cm-purple">
-              Discover
-            </p>
-            <h1 className="mt-1.5 text-2xl sm:text-3xl font-bold text-white">
-              Find something to watch
-            </h1>
-            <p className="mt-1.5 text-sm text-slate-400">
-              Mix and match mood, genre, and language — results update live.
-            </p>
+        <section className="dc-discover-builder">
+          <div className="dc-builder-heading"><div><span className="dc-discover-step">STEP 01 / THE FEELING</span><h2>Choose your mood</h2><p>Start with the kind of night you want.</p></div><span className="dc-builder-optional">PICK ONE</span></div>
+          <div className="dc-mood-picker">
+            {moods.map(m=>{const meta=MOOD_META[m.key]||{icon:"✦",note:m.description||"Explore this mood",color:"cyan"};return <button key={m.key} title={m.description} onClick={()=>setActiveMood(current=>current===m.key?null:m.key)} className={`dc-mood-choice tone-${meta.color}${activeMood===m.key?" chosen":""}`} aria-pressed={activeMood===m.key}>
+              <span className="dc-mood-icon">{meta.icon}</span><span className="dc-mood-name">{m.label}</span><span className="dc-mood-note">{meta.note}</span><span className="dc-mood-check">{activeMood===m.key?"✓":"＋"}</span>
+            </button>;})}
+            {loadingFilters&&Array.from({length:8}).map((_,i)=><div className="dc-mood-loading" key={i}/>)}
           </div>
 
-          <button
-            onClick={() => navigate("/home")}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10"
-          >
-            Back to home
-          </button>
-        </div>
-      </section>
+          <div className="dc-builder-divider"/>
+          <div className="dc-builder-heading"><div><span className="dc-discover-step">STEP 02 / THE FLAVOUR</span><h2>Mix your genres</h2><p>Choose more than one. Unexpected combinations are welcome.</p></div><span className="dc-builder-optional">MULTI-SELECT</span></div>
+          <div className="dc-genre-picker">
+            {genres.map(g=><button key={g.id} onClick={()=>toggleGenre(g.id)} className={`dc-genre-chip${activeGenres.includes(g.id)?" selected":""}`} aria-pressed={activeGenres.includes(g.id)}><span>{activeGenres.includes(g.id)?"✓":"＋"}</span>{g.name}</button>)}
+            {loadingFilters&&Array.from({length:8}).map((_,i)=><div className="dc-genre-loading" key={i}/>)}
+          </div>
 
-      {/* Mood chips */}
-      <section className="max-w-7xl mx-auto px-6 mt-6">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Mood
-        </h2>
-        {filtersLoading ? (
-          <div className="flex gap-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-9 w-28 animate-pulse rounded-full bg-white/10" />
-            ))}
+          <div className="dc-builder-divider"/>
+          <div className="dc-builder-heading dc-preference-heading"><div><span className="dc-discover-step">STEP 03 / MAKE IT YOURS</span><h2>Fine-tune the evening</h2><p>A couple of details to narrow the search.</p></div></div>
+          <div className="dc-preference-row">
+            <label className="dc-preference-control"><span><Languages size={15}/> Language</span><select value={activeLanguage||""} onChange={e=>setActiveLanguage(e.target.value||null)}><option value="">Any language</option>{languages.map(l=><option key={l.code} value={l.code}>{l.label}</option>)}</select><ChevronDown size={14}/></label>
+            <label className="dc-preference-control"><span><Clapperboard size={15}/> Sort collection</span><select value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="popularity.desc">Most popular</option><option value="vote_average.desc">Highest rated</option><option value="primary_release_date.desc">Newest releases</option><option value="revenue.desc">Biggest hits</option></select><ChevronDown size={14}/></label>
           </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {moods.map((m) => (
-              <button
-                key={m.key}
-                onClick={() =>
-                  setActiveMood((prev) => (prev === m.key ? null : m.key))
-                }
-                title={m.description}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  activeMood === m.key
-                    ? "border-cm-purple bg-cm-purple/25 text-white"
-                    : "border-cm-line bg-white/5 text-slate-300 hover:bg-white/10"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
 
-      {/* Genre chips */}
-      <section className="max-w-7xl mx-auto px-6 mt-5">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Genre
-        </h2>
-        {filtersLoading ? (
-          <div className="flex gap-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-9 w-24 animate-pulse rounded-full bg-white/10" />
-            ))}
+          <div className="dc-selection-summary">
+            <div className="dc-selection-copy"><span className="dc-summary-icon"><Film size={16}/></span><div><strong>{selectionCount?selectionCount+" preferences selected":"Your movie mix is wide open"}</strong><small>{[selectedMood?.label,...activeGenreNames,activeLanguage?languages.find(l=>l.code===activeLanguage)?.label:null].filter(Boolean).join(" · ")||"Choose a mood or genre to make this collection yours."}</small></div></div>
+            {selectionCount>0&&<button onClick={clearAll} className="dc-clear-selection"><RotateCcw size={13}/> Reset picks</button>}
           </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {genres.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => toggleGenre(g.id)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  activeGenres.includes(g.id)
-                    ? "border-cm-cyan bg-cm-cyan/20 text-white"
-                    : "border-cm-line bg-white/5 text-slate-300 hover:bg-white/10"
-                }`}
-              >
-                {g.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
+        </section>
 
-      {/* Language dropdown */}
-      <section className="max-w-7xl mx-auto px-6 mt-5 flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Language
-          </h2>
-          <select
-            value={activeLanguage || ""}
-            onChange={(e) => setActiveLanguage(e.target.value || null)}
-            className="rounded-xl border border-cm-line bg-cm-surface px-4 py-2 text-sm text-white outline-none focus:border-cm-purple"
-          >
-            <option value="">Any language</option>
-            {languages.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {hasFilters && (
-          <button
-            onClick={clearAll}
-            className="mt-6 flex items-center gap-1.5 rounded-full border border-cm-line bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
-          >
-            <X size={13} />
-            Clear filters
-          </button>
-        )}
-      </section>
-
-      {/* Results */}
-      <section className="max-w-7xl mx-auto px-6 mt-8 pb-16">
-        {loading && page === 1 ? (
-          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="h-[250px] animate-pulse rounded-2xl bg-zinc-800" />
-            ))}
-          </div>
-        ) : movies.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/10 bg-white/5 py-16 text-center">
-            <Sparkles className="text-cm-purple" size={22} />
-            <p className="text-sm text-slate-400">
-              No movies matched that combination — try loosening a filter.
-            </p>
-          </div>
-        ) : (
-          <>
-          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-            {movies.map((movie) => (
-              <div
-                key={movie.id}
-                className="cursor-pointer"
-                onClick={() => navigate(`/movie/${movie.id}`)}
-              >
-                <MovieCard movie={movie} />
-              </div>
-            ))}
-          </div>
-          {hasMore && (
-            <div className="mt-10 flex justify-center">
-              <button
-                type="button"
-                onClick={() => setPage((current) => current + 1)}
-                disabled={loading}
-                className="rounded-full border border-white/15 bg-white/5 px-7 py-3 text-sm font-semibold text-white transition hover:border-[var(--dc-lime)] hover:text-[var(--dc-lime)] disabled:cursor-wait disabled:opacity-50"
-              >
-                {loading ? "Loading movies..." : "Load more movies"}
-              </button>
-            </div>
-          )}
-          </>
-        )}
-      </section>
-    </div>
-  );
+        <section className="dc-discover-results">
+          <div className="dc-results-heading"><div><span className="dc-discover-step">MADE FOR YOUR MOOD</span><h2>{selectedMood?selectedMood.label+" movies":activeGenreNames.length?activeGenreNames.join(" + "):"Explore the collection"}</h2><p>{movies.length?movies.length+" films in this view":"Your results update when you change your picks."}</p></div><span className="dc-results-sort"><SlidersHorizontal size={14}/> {sortBy==="vote_average.desc"?"Top rated":sortBy==="primary_release_date.desc"?"Newest first":sortBy==="revenue.desc"?"Box office":"Popular first"}</span></div>
+          {loading&&page===1?<div className="dc-discover-grid">{Array.from({length:12}).map((_,i)=><div className="dc-discover-skeleton" key={i}/>)}</div>:
+            movies.length===0?<div className="dc-discover-empty"><span><Sparkles size={22}/></span><h3>{error||"A blank canvas for your next favourite."}</h3><p>Try another mood or remove a genre to widen your results.</p><button onClick={clearAll}>Explore everything</button></div>:
+            <><div className="dc-discover-grid">{movies.map(movie=><div key={movie.id} className="dc-discover-movie" onClick={()=>navigate(`/movie/${movie.id}`)}><MovieCard movie={movie}/></div>)}</div>
+            {hasMore&&<div className="dc-discover-more"><button onClick={()=>setPage(value=>value+1)} disabled={loading}>{loading?"Finding more films":"Load more films"}</button></div>}</>}
+        </section>
+      </div>
+    </main>
+  </div>;
 }
