@@ -1,205 +1,30 @@
-import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { Search } from "lucide-react";
-
+import { useEffect,useState } from "react";
+import { useLocation,useNavigate } from "react-router-dom";
+import { Sparkles,SlidersHorizontal } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import HomeSidebar from "../components/layout/HomeSidebar";
 import RecommendationSection from "../components/RecommendationSection";
 import { getAuthState } from "../services/auth";
-
-import {
-  getTrendingMovies,
-  getTopRatedMovies,
-  getUpcomingMovies,
-  getRecommendations,
-  getCollaborativeRecommendations,
-  getPersonalizedRecommendations,
-  recordSearch,
-} from "../services/movies";
-
-export default function RecommendPage() {
-  const location = useLocation();
-  const { userId, username } = getAuthState();
-
-  // Only show "Because you searched" if the user actually arrived here
-  // via a search (from Search.jsx / SearchModal / Hero / FilterBar) -
-  // previously this defaulted to a hardcoded "Avengers" search on every
-  // direct visit, which made no sense.
-  const initialSearch = location.state?.search || "";
-
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
-  const [activeSearch, setActiveSearch] = useState(initialSearch);
-
-  const [recommended, setRecommended] = useState([]);
-  const [personalized, setPersonalized] = useState([]);
-  const [collaborative, setCollaborative] = useState([]);
-  const [trending, setTrending] = useState([]);
-  const [topRated, setTopRated] = useState([]);
-  const [upcoming, setUpcoming] = useState([]);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const filterFutureMovies = (movies) => {
-    const today = new Date().toISOString().slice(0, 10);
-    return movies
-      .filter((movie) => movie.release_date && movie.release_date >= today)
-      .sort((a, b) => a.release_date.localeCompare(b.release_date));
-  };
-
-  const loadMovies = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const [
-        recommend,
-        personalizedMovies,
-        collaborativeMovies,
-        trendingMovies,
-        topRatedMovies,
-        upcomingMovies,
-      ] = await Promise.all([
-        activeSearch ? getRecommendations(activeSearch) : Promise.resolve([]),
-        getPersonalizedRecommendations(userId),
-        getCollaborativeRecommendations(userId),
-        getTrendingMovies(),
-        getTopRatedMovies(),
-        getUpcomingMovies(),
-      ]);
-
-      setRecommended(recommend || []);
-      setPersonalized(personalizedMovies || []);
-      setCollaborative(collaborativeMovies || []);
-      setTrending(trendingMovies || []);
-      setTopRated(topRatedMovies || []);
-      setUpcoming(filterFutureMovies(upcomingMovies || []));
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load movies.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadMovies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSearch, userId]);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (!searchTerm.trim()) return;
-    recordSearch(searchTerm);
-    setActiveSearch(searchTerm.trim());
-  };
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-cm-bg text-red-400">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <div className="dc-app-shell">
-      <HomeSidebar />
-      <main className="dc-app-main">
-      <Navbar />
-      <div className="dc-ai-page">
-      <section className="dc-ai-intro"><span className="dc-discover-kicker"><Search size={13}/> DEEPCINE INTELLIGENCE</span><h1>Your next watch, <em>thoughtfully picked.</em></h1><p>Recommendations shaped by your taste, viewing patterns and the films you love.</p></section>
-
-      <section className="dc-ai-search-box">
-        <form
-          onSubmit={handleSearch}
-          className="dc-ai-search-form"
-        >
-          <Search size={15} className="ml-2 text-cm-muted" />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={
-              username
-                ? `Hi ${username} — search a movie to sharpen your recommendations...`
-                : "Search a movie to sharpen your recommendations..."
-            }
-            className="dc-ai-search-input"
-          />
-          <button
-            type="submit"
-            className="dc-ai-search-button"
-          >
-            Search
-          </button>
-        </form>
-      </section>
-
-      <RecommendationSection
-        movies={personalized}
-        loading={loading}
-        eyebrow="Personalized"
-        title="Recommended For You"
-        description="A mix of your watch history and genre affinity."
-        emptyMessage={
-          userId
-            ? "Watch a few movies and we'll start building this for you."
-            : "Log in to see recommendations personalized to you."
-        }
-      />
-
-      {activeSearch && (
-        <RecommendationSection
-          movies={recommended}
-          loading={loading}
-          eyebrow="Content-based"
-          title={`Because You Searched "${activeSearch}"`}
-          description="Movies with similar themes, tone, and story."
-          emptyMessage={`No close matches found for "${activeSearch}".`}
-        />
-      )}
-
-      <RecommendationSection
-        movies={collaborative}
-        loading={loading}
-        eyebrow="Collaborative filtering"
-        title="Viewers Like You Also Watched"
-        description="Matched with people who share your watch patterns."
-        emptyMessage={
-          userId
-            ? null // stays hidden entirely when empty & logged in - not enough data yet
-            : "Log in to unlock collaborative recommendations."
-        }
-      />
-
-      <RecommendationSection
-        movies={trending}
-        loading={loading}
-        eyebrow="This week"
-        title="Trending Movies"
-        description="What everyone's watching right now."
-      />
-
-      <RecommendationSection
-        movies={upcoming}
-        loading={loading}
-        eyebrow="Coming soon"
-        title="Upcoming Movies"
-        description="Mark your calendar."
-      />
-
-      <RecommendationSection
-        movies={topRated}
-        loading={loading}
-        eyebrow="All-time"
-        title="Top Rated Movies"
-        description="Highest rated by audiences."
-      />
-
-      <footer className="dc-ai-footer">DEEPCINE · RECOMMENDATIONS THAT LEARN YOUR TASTE</footer>
-      </div>
-      </main>
-    </div>
-  );
+import { getTrendingMovies,getRecommendations,getCollaborativeRecommendations,getPersonalizedRecommendations,discoverMovies } from "../services/movies";
+export default function RecommendPage(){
+ const location=useLocation(),navigate=useNavigate(),{userId}=getAuthState();
+ const search=location.state?.search?.trim()||"",filters=location.state?.filters||null;
+ const [recommended,setRecommended]=useState([]),[personalized,setPersonalized]=useState([]),[collaborative,setCollaborative]=useState([]),[filterPicks,setFilterPicks]=useState([]),[trending,setTrending]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+ useEffect(()=>{let cancelled=false;async function load(){setLoading(true);setError("");try{
+ const [s,p,c,t,f]=await Promise.all([search?getRecommendations(search):Promise.resolve([]),userId?getPersonalizedRecommendations(userId):Promise.resolve([]),userId?getCollaborativeRecommendations(userId):Promise.resolve([]),getTrendingMovies(),filters?discoverMovies({mood:filters.mood,genres:filters.genres||[],language:filters.language,sortBy:filters.sortBy,page:1}):Promise.resolve([])]);
+ if(cancelled)return;setRecommended(s||[]);setPersonalized(p||[]);setCollaborative(c||[]);setTrending(t||[]);setFilterPicks(f||[]);
+ }catch(err){console.error("AI Picks load failed",err);if(!cancelled)setError("Some recommendations couldn't be loaded. Please try again.");}finally{if(!cancelled)setLoading(false);}}
+ load();return()=>{cancelled=true;};},[search,userId,filters?.mood,filters?.language,filters?.sortBy,(filters?.genres||[]).join(",")]);
+ const hasPersonalSignals=Boolean(search||filters||personalized.length||collaborative.length);
+ return <div className="dc-app-shell"><HomeSidebar/><main className="dc-app-main"><Navbar/><div className="dc-ai-page">
+ <section className="dc-ai-intro"><span className="dc-discover-kicker"><Sparkles size={13}/> DEEPCINE INTELLIGENCE</span><h1>Your next watch, <em>thoughtfully picked.</em></h1><p>Movie picks shaped by what you search, what you rate and the genres you explore. Use the search icon in the top bar or build a mix in Explore.</p><div className="dc-ai-shortcuts"><button onClick={()=>navigate("/discover")}><SlidersHorizontal size={14}/> Build a genre mix</button>{search&&<span className="dc-ai-context">Search signal: “{search}”</span>}{filters&&<span className="dc-ai-context">Your Explore filters are applied</span>}</div></section>
+ {error&&<p className="dc-ai-error">{error}</p>}
+ {search&&<RecommendationSection movies={recommended} loading={loading} eyebrow="BASED ON YOUR SEARCH" title={`Because you searched “${search}”`} description="Content-based matches related to the title you searched for." emptyMessage="No close matches found. Try another title from the top-bar search."/>}
+ {filters&&<RecommendationSection movies={filterPicks} loading={loading} eyebrow="BASED ON YOUR EXPLORE FILTERS" title="Your selected movie mix" description="Movies matching the mood, genres and language you selected in Explore." emptyMessage="No films matched those filters. Adjust your selection in Explore."/>}
+ {userId&&<RecommendationSection movies={personalized} loading={loading} eyebrow="LEARNED FROM YOUR TASTE" title="Picked for you" description="Personalized from your recorded movie activity and preferences." emptyMessage="Rate movies, add titles to your watchlist and explore films. Your personal picks will appear here as the system learns your taste."/>}
+ {userId&&<RecommendationSection movies={collaborative} loading={loading} eyebrow="VIEWERS WITH SIMILAR TASTE" title="People like you also watched" description="Collaborative recommendations based on similar users' viewing patterns." emptyMessage="More viewing activity is needed before we can find similar viewers."/>}
+ {!hasPersonalSignals&&<div className="dc-ai-fallback"><span className="dc-discover-step">START EXPLORING</span><h2>Popular right now</h2><p>Until DeepCine has enough signals to personalize your picks, here's what's trending.</p></div>}
+ <RecommendationSection movies={trending} loading={loading} eyebrow={hasPersonalSignals?"A LITTLE INSPIRATION":"TRENDING NOW"} title={hasPersonalSignals?"Trending for everyone":"Popular right now"} description="Currently popular films, useful when you just want something good to watch." emptyMessage="Trending movies are temporarily unavailable."/>
+ <footer className="dc-ai-footer">DEEPCINE · RECOMMENDATIONS THAT LEARN YOUR TASTE</footer>
+ </div></main></div>;
 }
