@@ -74,11 +74,13 @@ export default function MovieDetails() {
 
         // Opening a movie details page is recorded as a watch-history signal.
         recordWatch(movieData.id);
-        Promise.all([getMyRatings(), getWatchlist()]).then(([ratings, watchlist]) => {
-          if (cancelled) return;
-          setMyRating(ratings.find((item) => item.tmdb_id === movieData.id)?.rating || 0);
-          setWatchlisted(watchlist.some((item) => item.tmdb_id === movieData.id));
-        }).catch((err) => console.error("Could not load movie feedback", err));
+        if (localStorage.getItem("access_token")) {
+          Promise.all([getMyRatings(), getWatchlist()]).then(([ratings, watchlist]) => {
+            if (cancelled) return;
+            setMyRating(ratings.find((item) => item.tmdb_id === movieData.id)?.rating || 0);
+            setWatchlisted(watchlist.some((item) => item.tmdb_id === movieData.id));
+          }).catch((err) => console.error("Could not load movie feedback", err));
+        }
       })
       .catch((err) => {
         console.error(err);
