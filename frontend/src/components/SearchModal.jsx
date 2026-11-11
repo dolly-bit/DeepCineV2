@@ -113,16 +113,16 @@ export default function SearchModal({ isOpen, onClose }) {
             duration: 0.25,
           }}
           onClick={(e) => e.stopPropagation()}
-          className="w-[95%] max-w-6xl h-[82vh] rounded-3xl bg-[#121212] border border-zinc-800 shadow-2xl flex flex-col overflow-hidden"
+          className="dc-search-modal w-[95%] max-w-6xl h-[82vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden"
         >
 
           {/* Search Bar */}
 
-          <div className="flex items-center gap-4 px-8 py-6 border-b border-zinc-800">
+          <div className="dc-search-modal-bar flex items-center gap-4 px-7 py-4 border-b">
 
             <Search
-              size={24}
-              className="text-purple-500"
+              size={20}
+              className="dc-search-modal-icon"
             />
 
             <input
@@ -130,14 +130,14 @@ export default function SearchModal({ isOpen, onClose }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search movies..."
-              className="flex-1 bg-transparent outline-none text-xl text-white placeholder:text-zinc-500"
+              className="dc-search-modal-input flex-1 bg-transparent outline-none"
             />
 
             <button
               onClick={onClose}
             >
               <X
-                className="text-zinc-400 hover:text-white"
+                className="dc-search-modal-close"
               />
             </button>
 
@@ -145,12 +145,12 @@ export default function SearchModal({ isOpen, onClose }) {
 
           {/* Content */}
 
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="dc-search-modal-content flex-1 overflow-y-auto px-7 py-6">
             {/* Trending Movies */}
 
 {!query && (
   <>
-    <h2 className="text-xl font-bold mb-4">
+    <h2 className="dc-search-section-title text-lg font-bold mb-4">
       🔥 Trending Movies
     </h2>
 
@@ -174,7 +174,7 @@ export default function SearchModal({ isOpen, onClose }) {
 {query && (
   <>
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-2xl font-bold">
+      <h2 className="dc-search-section-title text-lg font-bold">
         Search Results
       </h2>
 
@@ -184,7 +184,7 @@ export default function SearchModal({ isOpen, onClose }) {
             onClose();
             navigate("/recommend", { state: { search: query.trim() } });
           }}
-          className="flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-200 transition hover:bg-purple-500/20"
+          className="dc-search-personalized flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition"
         >
           <Sparkles size={15} />
           Personalized picks for "{query.trim()}"
@@ -201,9 +201,9 @@ export default function SearchModal({ isOpen, onClose }) {
         No movies found
       </div>
     ) : (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+      <div className="dc-search-results-grid grid gap-5">
         {movies.map((movie) => (
-          <div key={movie.id} onClick={onClose}>
+          <div key={movie.id} onClick={onClose} className="dc-search-result-item">
             <MovieCard movie={movie} />
           </div>
         ))}
