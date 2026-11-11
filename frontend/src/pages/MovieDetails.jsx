@@ -114,7 +114,7 @@ export default function MovieDetails() {
   return (
     <div className="min-h-screen bg-cm-bg text-white">
       {/* Backdrop */}
-      <div className="relative h-[62vh]">
+      <div className="relative min-h-[680px] lg:min-h-[700px]">
         <BackdropImage
           src={movie.backdrop_url}
           title={movie.title}
@@ -129,7 +129,7 @@ export default function MovieDetails() {
           <ArrowLeft size={18} />
         </button>
 
-        <div className="relative z-10 mx-auto flex h-full max-w-7xl items-end gap-7 px-6 pb-9">
+        <div className="relative z-10 mx-auto flex min-h-[680px] max-w-7xl items-center gap-7 px-6 py-12 lg:min-h-[700px]">
           <PosterImage
             src={movie.poster_url}
             title={movie.title}
