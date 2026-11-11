@@ -7,7 +7,7 @@ export default function Navbar({ publicMode = false, hideSearch = false } = {}) 
   const navigate=useNavigate(); const [searchOpen,setSearchOpen]=useState(false); const [menuOpen,setMenuOpen]=useState(false);
   const {accessToken,userId,username}=getAuthState(); const authenticated=Boolean(accessToken&&userId&&userId!=="undefined");
   const signOut=()=>{clearAuthState();navigate("/",{replace:true});};
-  return <header className="dc-dashboard-topbar">
+  return <header className={`dc-dashboard-topbar${publicMode ? " dc-landing-topbar" : ""}`}>
     {!hideSearch && <div className="dc-topbar-search"><Search size={17}/><button onClick={()=>setSearchOpen(true)}>Search for films, directors, or actors...</button><kbd>⌘ K</kbd></div>}
     <div className="dc-topbar-actions">
       <button className="dc-topbar-icon" aria-label="Notifications"><Bell size={17}/></button>
