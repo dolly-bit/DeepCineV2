@@ -129,7 +129,14 @@ def test_paired_bootstrap_difference_uses_matching_users():
         3: {"ndcg": 0.2},
     }
     ci = paired_bootstrap_difference_ci(left, right, "ndcg", seed=3, samples=200)
-    assert ci == {"lower": 0.2, "upper": 0.2}
+    repeated = paired_bootstrap_difference_ci(
+        left, right, "ndcg", seed=3, samples=200
+    )
+    # Per-user differences are [0.3, 0.2, 0.2], so resampling need not
+    # produce a zero-width interval even though the point mean is deterministic.
+    assert ci == repeated
+    assert ci["lower"] <= (0.3 + 0.2 + 0.2) / 3 <= ci["upper"]
+    assert ci["lower"] > 0
 
 
 def test_evaluate_rankings_can_skip_bootstrap_for_tuning():
