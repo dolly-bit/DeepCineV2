@@ -39,6 +39,7 @@ DEFAULT_WEIGHTS = {
     "popularity": 0.25,
 }
 WEIGHT_GRID = (0.5, 1.0, 2.0)
+DEFAULT_EVALUATION_USER_SAMPLE_SIZE = 2_000
 TUNING_USER_SAMPLE_SIZE = 2_000
 
 
@@ -139,6 +140,17 @@ def build_temporal_split(
         "validation_interactions": sum(map(len, validation.values())),
         "test_interactions": sum(map(len, test.values())),
     }
+
+
+def sample_evaluation_users(user_ids, sample_size=2_000, seed=42):
+    """Return a deterministic uniform sample, or all users when below the limit."""
+    users = sorted(user_ids)
+    if sample_size <= 0:
+        raise ValueError("sample_size must be positive")
+    if len(users) <= sample_size:
+        return users
+    rng = np.random.default_rng(seed)
+    return sorted(rng.choice(users, size=sample_size, replace=False).tolist())
 
 
 def precision_at_k(recommended, relevant, k):
@@ -418,14 +430,19 @@ def run(args):
             and validation[user] & overlap_ids
             and test[user] & overlap_ids
         }
-        train = {u: train[u] & overlap_ids for u in eligible}
-        validation = {u: validation[u] & overlap_ids for u in eligible}
-        test = {u: test[u] & overlap_ids for u in eligible}
         if not eligible:
             raise RuntimeError(
                 "No eligible users after overlap filtering. Expand the catalog "
                 "or check the positive threshold and MovieLens mapping."
             )
+
+        eligible_user_count = len(eligible)
+        sampled_users = sample_evaluation_users(
+            eligible, sample_size=args.evaluation_users, seed=args.seed
+        )
+        train = {u: train[u] & overlap_ids for u in sampled_users}
+        validation = {u: validation[u] & overlap_ids for u in sampled_users}
+        test = {u: test[u] & overlap_ids for u in sampled_users}
 
         overlap_movies = [catalog_by_id[item] for item in sorted(overlap_ids)]
         signals = build_signal_rankings(
@@ -482,10 +499,13 @@ def run(args):
                 "validation_ratio": args.validation_ratio,
                 "test_ratio": args.test_ratio,
                 **split_stats,
-                "eligible_users_all_three_partitions": len(eligible),
-                "eligible_train_interactions": sum(map(len, train.values())),
-                "eligible_validation_interactions": sum(map(len, validation.values())),
-                "eligible_test_interactions": sum(map(len, test.values())),
+                "eligible_users_all_three_partitions": eligible_user_count,
+                "evaluation_users_sampled": len(sampled_users),
+                "evaluation_user_sample_size_requested": args.evaluation_users,
+                "evaluation_user_sample_method": "seeded uniform sample without replacement",
+                "evaluation_train_interactions": sum(map(len, train.values())),
+                "evaluation_validation_interactions": sum(map(len, validation.values())),
+                "evaluation_test_interactions": sum(map(len, test.values())),
             },
             "reproducibility": {
                 "seed": args.seed,
@@ -498,11 +518,13 @@ def run(args):
             "evaluation": {
                 "metrics": ["precision", "recall", "ndcg", "coverage"],
                 "ks": args.ks,
-                "averaging": "macro average over eligible users",
+                "averaging": "macro average over the seeded sampled evaluation users",
                 "coverage_denominator": "MovieLens/DeepCine overlapping catalog",
                 "model_fit_data": "training partition only",
                 "weight_selection_data": "validation partition only",
                 "final_reporting_data": "held-out test partition only",
+                "evaluation_population": "seeded uniform sample of eligible users",
+                "evaluation_users_sampled": len(sampled_users),
                 "objective": tuning["objective"],
             },
             "validation_metrics": validation_metrics,
@@ -514,6 +536,7 @@ def run(args):
                 "Per-user chronological splitting is not a global calendar-time split.",
                 "Personalized popularity uses training-only genre affinity and item interaction counts.",
                 "The final test partition must not be used to select weights or model settings.",
+                "Metrics are estimated on a seeded uniform sample of eligible users, not the full eligible population.",
             ],
         }
 
@@ -555,12 +578,17 @@ def parse_args():
     parser.add_argument("--ks", default="5,10,20")
     parser.add_argument("--als-factors", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--evaluation-users", type=int,
+        default=DEFAULT_EVALUATION_USER_SAMPLE_SIZE,
+        help="maximum eligible users to evaluate (seeded uniform sample; default: 2000)",
+    )
     args = parser.parse_args()
     ratios = (args.train_ratio, args.validation_ratio, args.test_ratio)
     if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
         parser.error("train/validation/test ratios must be positive and sum to 1")
-    if args.chunksize <= 0 or args.als_factors <= 0:
-        parser.error("chunksize and ALS factors must be positive")
+    if args.chunksize <= 0 or args.als_factors <= 0 or args.evaluation_users <= 0:
+        parser.error("chunksize, ALS factors, and evaluation-users must be positive")
     args.ks = tuple(sorted({int(value) for value in args.ks.split(",")}))
     if not args.ks or any(k <= 0 for k in args.ks):
         parser.error("--ks must contain positive integers")
