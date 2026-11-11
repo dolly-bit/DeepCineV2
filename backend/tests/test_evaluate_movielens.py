@@ -145,3 +145,14 @@ def test_evaluate_rankings_can_skip_bootstrap_for_tuning():
     )
     assert metrics["1"]["ndcg"] == 1.0
     assert "ndcg_ci95" not in metrics["1"]
+
+
+
+def test_validation_and_test_cohorts_are_independently_seeded():
+    users = set(range(10_000))
+    validation = sample_evaluation_users(users, sample_size=500, seed=42)
+    test = sample_evaluation_users(users, sample_size=500, seed=43)
+    assert validation == sample_evaluation_users(users, sample_size=500, seed=42)
+    assert test == sample_evaluation_users(users, sample_size=500, seed=43)
+    assert validation != test
+    assert len(validation) == len(test) == 500
