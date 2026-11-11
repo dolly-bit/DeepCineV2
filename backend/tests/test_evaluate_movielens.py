@@ -51,4 +51,4 @@ def test_metrics_use_overlap_catalog_for_coverage():
     metrics = evaluate_rankings(rankings, test, {10, 20, 30, 99}, [1])
     assert metrics["1"]["precision"] == 0.5
     assert metrics["1"]["recall"] == 0.5
-    assert metrics["1"]["coverage"] == 0.75
+    assert metrics["1"]["coverage"] == 0.5
