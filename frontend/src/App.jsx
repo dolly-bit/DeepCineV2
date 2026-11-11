@@ -44,14 +44,7 @@ export default function App() {
 
     {/* AI Recommendation */}
     <Route path="/recommend" element={<RecommendPage />} />
-    <Route
-      path="/movie/:id"
-      element={
-        <ProtectedRoute>
-          <MovieDetails />
-        </ProtectedRoute>
-      }
-    />
+    <Route path="/movie/:id" element={<MovieDetails />} />
     <Route
       path="/search"
       element={
