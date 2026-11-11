@@ -1417,3 +1417,53 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 .dc-library-empty-state h2 { color:#f1f0e9; font-size:18px; font-weight:750; }
 .dc-library-empty-state p,.dc-library-empty { color:#929990; font-size:13px; }
 @media(max-width:640px) { .dc-library-page { padding:28px 18px 40px; }.dc-library-tabs button { padding:11px 8px; font-size:11px; }.dc-library-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 12px; } }
+
+
+/* Blue / cyan accent system for the dashboard Library and Movie Details pages. */
+.dc-library-page,
+.dc-movie-page {
+  --dc-lime:#36dce8;
+  --dc-blue:#168dbb;
+}
+.dc-library-page .dc-library-tabs button.active {
+  border-color:#36dce8;
+  color:#55e6ef;
+}
+.dc-library-page .dc-library-tabs button.active span {
+  background:rgba(54,220,232,.14);
+  color:#55e6ef;
+}
+.dc-library-page .dc-library-empty-state svg { color:#36dce8; }
+.dc-library-page .dc-library-heading .dc-slider-eyebrow { color:#55dce8; }
+
+.dc-movie-page .dc-detail-poster {
+  border-color:rgba(54,220,232,.5);
+}
+.dc-movie-page .dc-detail-genre {
+  border-color:rgba(54,220,232,.42);
+  background:rgba(20,151,190,.12);
+  color:#9cecf1;
+}
+.dc-movie-page .dc-watchlist-toggle {
+  border-color:rgba(54,220,232,.48);
+  background:rgba(20,151,190,.12);
+  color:#8feaf1;
+}
+.dc-movie-page .dc-watchlist-toggle:hover,
+.dc-movie-page .dc-watchlist-toggle.saved {
+  border-color:rgba(54,220,232,.7);
+  background:rgba(20,151,190,.2);
+  color:#c1f7fa;
+}
+.dc-movie-page .dc-detail-primary {
+  border-color:#36dce8;
+  background:linear-gradient(135deg,#36dce8,#168dbb);
+  color:#04171d;
+}
+.dc-movie-page .dc-detail-primary:hover { background:#65e9ef; }
+.dc-movie-page .dc-detail-copy .text-dc-lime { color:#69e2eb; }
+.dc-movie-page .dc-detail-section-title { color:#f1f7f8; }
+.dc-movie-page .dc-rating-control > div button { color:#42dce8; }
+.dc-movie-page .dc-feedback-message { color:#75e5ed; }
+.dc-movie-page .dc-cast-card { border-color:rgba(54,220,232,.13); }
+.dc-movie-page .dc-cast-card:hover { border-color:rgba(54,220,232,.4); }
