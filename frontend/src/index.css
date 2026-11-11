@@ -1369,3 +1369,33 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
   .dc-detail-section { padding-left:20px; padding-right:20px; }
   .dc-cast-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
 }
+
+
+/* Movie details uses the exact shared dashboard shell and Home sidebar. */
+.dc-movie-shell {
+  display:grid;
+  grid-template-columns:224px minmax(0,1fr);
+  min-height:100vh;
+  width:100%;
+  background:#07131d;
+}
+.dc-movie-shell > .dc-side-panel {
+  position:sticky;
+  top:0;
+  display:flex;
+  width:224px;
+  height:100vh;
+  min-height:100vh;
+  align-self:start;
+}
+.dc-movie-shell > .dc-movie-page {
+  min-width:0;
+  width:100%;
+  overflow:hidden;
+}
+.dc-movie-shell .dc-detail-hero { width:100%; }
+@media(max-width:900px) {
+  .dc-movie-shell { display:block; }
+  .dc-movie-shell > .dc-side-panel { display:none; }
+  .dc-movie-shell > .dc-movie-page { width:100%; }
+}
