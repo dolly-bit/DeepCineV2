@@ -16,11 +16,16 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Environment variables
+# Environment variables (keep real secrets out of Git; allow example templates)
 .env
 .env.*
+!*.env.example
 backend/.env
+backend/.env.*
+!backend/.env.example
 frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # AI / generated data
 ai/faiss_index/
