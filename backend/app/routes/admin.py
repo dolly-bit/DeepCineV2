@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database.connection import SessionLocal
 from app.services.tmdb.movies import import_catalog_movies, TMDBAuthError
-from app.services.tmdb.genres import import_genres
 from ai.index_builder import build_recommendation_index
 from ai.recommender import invalidate_index_cache
 from app.services.tmdb.client import TMDB_CACHE
