@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Calendar, Clock, Star, Play, Bookmark, Check } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Star, Play, Bookmark, Check, Search, Bell, UserRound, Clapperboard } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   getMovieCast,
   getSimilarMovies,
@@ -112,7 +113,18 @@ export default function MovieDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-cm-bg text-white">
+    <div className="dc-movie-page min-h-screen bg-cm-bg text-white">
+      <header className="dc-movie-nav">
+        <Link to="/home" className="dc-movie-brand"><span className="dc-movie-brand-mark"><Clapperboard size={20}/></span><span>DEEP<span>CINE</span></span></Link>
+        <nav className="dc-movie-nav-links" aria-label="Main navigation">
+          <Link to="/home">Home</Link><Link to="/movies">Movies</Link><Link to="/discover">TV Shows</Link><Link to="/profile">My List</Link>
+        </nav>
+        <div className="dc-movie-nav-actions">
+          <Link to="/discover" aria-label="Search movies"><Search size={21}/></Link>
+          <button type="button" aria-label="Notifications"><Bell size={20}/><i/></button>
+          <Link to="/profile" className="dc-movie-avatar" aria-label="Profile"><UserRound size={19}/></Link>
+        </div>
+      </header>
       {/* Backdrop */}
       <div className="dc-detail-hero relative">
         <BackdropImage
@@ -122,14 +134,7 @@ export default function MovieDetails() {
         />
         <div className="dc-detail-backdrop-overlay absolute inset-0" />
 
-        <button
-          onClick={() => navigate(-1)}
-          className="dc-detail-back-button absolute left-5 top-5 z-20 rounded-full p-2.5 transition"
-        >
-          <ArrowLeft size={18} />
-        </button>
-
-        <div className="dc-detail-layout relative z-10 mx-auto flex max-w-7xl items-center gap-8 px-6">
+                <div className="dc-detail-layout relative z-10 mx-auto flex max-w-7xl items-center gap-8 px-6">
           <PosterImage
             src={movie.poster_url}
             title={movie.title}
@@ -225,7 +230,7 @@ export default function MovieDetails() {
                 onClick={() => navigate(-1)}
                 className="dc-detail-secondary rounded-xl px-5 py-2.5 text-sm transition"
               >
-                Back
+                More Info
               </button>
             </div>
           </div>
