@@ -7,7 +7,8 @@ import MovieCard from "../components/home/MovieCard";
 import { discoverMovies,getPersonalizedRecommendations,getCollaborativeRecommendations } from "../services/movies";
 export default function MoviesListPage(){
   const location=useLocation(),navigate=useNavigate();
-  const mode=location.state?.mode||"trending",title=location.state?.title||"Movies";
+  const [mode,setMode]=useState(location.state?.mode||"recent");
+  const title=mode==="top-rated"?"Top Rated":"Recently Added";
   const [movies,setMovies]=useState([]),[page,setPage]=useState(0),[loading,setLoading]=useState(true),[loadingMore,setLoadingMore]=useState(false),[hasMore,setHasMore]=useState(true),[error,setError]=useState("");
   useEffect(()=>{
     let cancelled=false;
@@ -41,7 +42,11 @@ export default function MoviesListPage(){
   }
   return <div className="dc-app-shell"><HomeSidebar/><main className="dc-app-main"><Navbar/><section className="dc-catalog-page">
     <button className="dc-catalog-back" onClick={()=>navigate("/home")}><ChevronLeft size={16}/> Back to home</button>
-    <div className="dc-catalog-heading"><div><span className="dc-slider-eyebrow">THE DEEPCINE LIBRARY</span><h1>{title}</h1><p>Explore a larger collection. Each batch adds up to 100 more films.</p></div><span className="dc-catalog-count">{movies.length.toLocaleString()} FILMS LOADED</span></div>
+    <div className="dc-catalog-heading"><div><span className="dc-slider-eyebrow">THE DEEPCINE LIBRARY</span><h1>Movie Collections</h1><p>Browse recently released films or discover the highest-rated movies.</p></div><span className="dc-catalog-count">{movies.length.toLocaleString()} FILMS LOADED</span></div>
+    <div className="dc-movie-collection-tabs" role="tablist" aria-label="Movie collections">
+      <button type="button" role="tab" aria-selected={mode==="recent"} className={mode==="recent"?"active":""} onClick={()=>setMode("recent")}>Recently Added</button>
+      <button type="button" role="tab" aria-selected={mode==="top-rated"} className={mode==="top-rated"?"active":""} onClick={()=>setMode("top-rated")}>Top Rated</button>
+    </div>
     {loading?<div className="dc-catalog-grid">{Array.from({length:20}).map((_,i)=><div className="dc-catalog-skeleton" key={i}/>)}</div>:error&&!movies.length?<p className="dc-catalog-message">{error}</p>:!movies.length?<p className="dc-catalog-message">No movies are available for this collection.</p>:<>
       <div className="dc-catalog-grid">{movies.map(movie=><MovieCard key={movie.id} movie={movie}/>)}</div>
       {error&&<p className="dc-catalog-message">{error}</p>}
