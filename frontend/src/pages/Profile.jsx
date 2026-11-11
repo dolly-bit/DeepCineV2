@@ -1,137 +1,102 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Mail, User as UserIcon, ShieldCheck, X } from "lucide-react";
-
+import { LogOut, Mail, User as UserIcon, ShieldCheck, X, Clapperboard } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
+import HomeSidebar from "../components/layout/HomeSidebar";
 import { getAuthState, getCurrentUser, clearAuthState } from "../services/auth";
 
 export default function Profile() {
   const navigate = useNavigate();
   const { username: cachedUsername } = getAuthState();
-
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       try {
         const data = await getCurrentUser();
-        setUser(data);
+        if (!cancelled) setUser(data);
       } catch (err) {
-        // A 401 here is already handled globally (api.js clears the
-        // session and redirects to /login), so this only fires for
-        // genuine network/server errors.
-        setError("Couldn't load your profile right now.");
+        if (!cancelled) setError("We couldn't load your account details. Please try again.");
         console.error(err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-
     load();
+    return () => { cancelled = true; };
   }, []);
 
   const handleLogout = () => {
     clearAuthState();
-    navigate("/");
+    navigate("/", { replace: true });
   };
 
   const displayName = user?.username || cachedUsername || "Your Account";
   const initial = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-cm-bg text-white">
-      <Navbar />
-
-      <section className="mx-auto max-w-3xl px-6 py-16">
-        <div className="relative rounded-[32px] border border-cm-line bg-cm-surface p-8 sm:p-10">
-          <button
-            type="button"
-            onClick={() => navigate("/home")}
-            aria-label="Close profile"
-            className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border border-cm-line bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
-          >
-            <X size={16} />
-          </button>
-
-          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cm-purple-deep to-cm-purple text-3xl font-bold text-white">
-              {initial}
-            </div>
-
+    <div className="dc-app-shell">
+      <HomeSidebar />
+      <main className="dc-app-main dc-profile-page">
+        <Navbar />
+        <section className="dc-profile-content">
+          <div className="dc-profile-heading">
             <div>
-              <h1 className="text-3xl font-bold text-white">
-                {displayName}
-              </h1>
-              <p className="mt-1 text-sm text-cm-muted">
-                Your DeepCine account
-              </p>
+              <span className="dc-profile-eyebrow">YOUR SPACE</span>
+              <h1>Account profile</h1>
+              <p>Manage your DeepCine identity and session.</p>
             </div>
+            <button type="button" onClick={() => navigate("/home")} className="dc-profile-close" aria-label="Back to home">
+              <X size={17} />
+            </button>
           </div>
 
-          {loading && (
-            <div className="mt-10 space-y-3">
-              <div className="h-5 w-2/3 animate-pulse rounded-full bg-white/10" />
-              <div className="h-5 w-1/2 animate-pulse rounded-full bg-white/10" />
+          <article className="dc-profile-card">
+            <div className="dc-profile-card-top">
+              <div className="dc-profile-avatar">{initial}</div>
+              <div className="dc-profile-identity">
+                <span className="dc-profile-kicker"><Clapperboard size={13} /> DEEPCINE MEMBER</span>
+                <h2>{displayName}</h2>
+                <p>Your personal cinema account</p>
+              </div>
+              <span className="dc-profile-status"><span /> Active</span>
             </div>
-          )}
 
-          {!loading && error && (
-            <div className="mt-8 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </div>
-          )}
-
-          {!loading && user && (
-            <div className="mt-10 space-y-4">
-              <div className="flex items-center gap-3 rounded-2xl border border-cm-line bg-black/20 px-5 py-4">
-                <UserIcon size={18} className="text-cm-purple" />
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-cm-muted">
-                    Username
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {user.username}
-                  </p>
+            {loading ? (
+              <div className="dc-profile-loading">
+                <span /><span /><span />
+              </div>
+            ) : error ? (
+              <div className="dc-profile-error">{error}</div>
+            ) : (
+              <div className="dc-profile-details">
+                <div className="dc-profile-detail">
+                  <span className="dc-profile-detail-icon"><UserIcon size={18} /></span>
+                  <div><small>USERNAME</small><strong>{user?.username || displayName}</strong></div>
+                </div>
+                <div className="dc-profile-detail">
+                  <span className="dc-profile-detail-icon"><Mail size={18} /></span>
+                  <div><small>EMAIL ADDRESS</small><strong>{user?.email || "Not available"}</strong></div>
+                </div>
+                <div className="dc-profile-detail">
+                  <span className="dc-profile-detail-icon"><ShieldCheck size={18} /></span>
+                  <div><small>ACCOUNT SECURITY</small><strong>Signed in · Session active</strong></div>
                 </div>
               </div>
+            )}
 
-              <div className="flex items-center gap-3 rounded-2xl border border-cm-line bg-black/20 px-5 py-4">
-                <Mail size={18} className="text-cm-purple" />
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-cm-muted">
-                    Email
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {user.email}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-2xl border border-cm-line bg-black/20 px-5 py-4">
-                <ShieldCheck size={18} className="text-emerald-400" />
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-cm-muted">
-                    Session
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    Signed in and verified
-                  </p>
-                </div>
-              </div>
+            <div className="dc-profile-card-footer">
+              <p>Enjoy your next movie.</p>
+              <button type="button" onClick={handleLogout} className="dc-profile-logout">
+                <LogOut size={16} /> Sign out
+              </button>
             </div>
-          )}
-
-          <button
-            onClick={handleLogout}
-            className="mt-10 flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 py-4 font-semibold text-white transition hover:bg-red-700"
-          >
-            <LogOut size={18} />
-            Log Out
-          </button>
-        </div>
-      </section>
+          </article>
+        </section>
+      </main>
     </div>
   );
 }
