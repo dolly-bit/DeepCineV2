@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Calendar, Clock, Star, Play } from "lucide-react";
 import {
@@ -50,7 +50,7 @@ export default function MovieDetails() {
   const [cast, setCast] = useState([]);
   const [similarMovies, setSimilarMovies] = useState([]);
 
-  async function loadMovie() {
+  const loadMovie = useCallback(async () => {
     try {
       const [movieData, trailerData, castData, similarData] = await Promise.all([
         getMovieDetails(id),
@@ -74,12 +74,11 @@ export default function MovieDetails() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMovie();
-  }, [id]);
+  }, [loadMovie]);
 
   if (loading) {
     return (
