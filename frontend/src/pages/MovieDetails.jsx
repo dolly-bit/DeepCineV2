@@ -120,11 +120,11 @@ export default function MovieDetails() {
           title={movie.title}
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-black/70" />
+        <div className="dc-detail-backdrop-overlay absolute inset-0" />
 
         <button
           onClick={() => navigate(-1)}
-          className="absolute left-5 top-5 z-20 rounded-full bg-black/60 p-2.5 transition hover:bg-cm-purple"
+          className="dc-detail-back-button absolute left-5 top-5 z-20 rounded-full p-2.5 transition"
         >
           <ArrowLeft size={18} />
         </button>
@@ -133,8 +133,8 @@ export default function MovieDetails() {
           <PosterImage
             src={movie.poster_url}
             title={movie.title}
-            className="w-48 shrink-0 rounded-xl shadow-2xl"
-            imgClassName="w-48 rounded-xl object-cover shadow-2xl"
+            className="dc-detail-poster shrink-0"
+            imgClassName="dc-detail-poster-image"
           />
 
           <div className="dc-detail-copy min-w-0">
@@ -146,7 +146,7 @@ export default function MovieDetails() {
               </p>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-5 text-sm">
+            <div className="dc-detail-meta mt-3 flex flex-wrap gap-5 text-sm">
               <div className="flex items-center gap-1.5">
                 <Star size={15} fill="var(--color-cm-amber)" className="text-cm-amber" />
                 <span>{movie.vote_average?.toFixed(1) ?? "N/A"}</span>
@@ -165,7 +165,7 @@ export default function MovieDetails() {
               ) : null}
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="dc-detail-genres mt-3 flex flex-wrap gap-2">
               {movie.genres?.map((genre) => (
                 <span
                   key={genre.id}
@@ -176,7 +176,7 @@ export default function MovieDetails() {
               ))}
             </div>
 
-            <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-300 md:text-base">
+            <p className="dc-detail-overview mt-4 line-clamp-3 text-sm leading-6 text-slate-300 md:text-base">
               {movie.overview}
             </p>
 
@@ -208,7 +208,7 @@ export default function MovieDetails() {
               }}>{watchlisted ? <Check size={15}/> : <Bookmark size={15}/>} {watchlisted ? "In My List" : "Add to My List"}</button>
               <span className="dc-feedback-message" role="status" aria-live="polite">{feedbackMessage || "\u00a0"}</span>
             </div>
-            <div className="mt-6 flex gap-3">
+            <div className="dc-detail-actions mt-6 flex gap-3">
               {trailer && (
                 <a
                   href={trailer}
@@ -233,8 +233,8 @@ export default function MovieDetails() {
       </div>
 
       {cast.length > 0 && (
-        <div className="dc-detail-section mx-auto max-w-7xl px-6 py-8">
-          <h2 className="mb-5 text-xl font-bold">🎭 Cast</h2>
+        <div className="dc-detail-section dc-cast-section mx-auto max-w-7xl px-6 py-8">
+          <h2 className="dc-detail-section-title mb-5 text-xl font-bold">♟ Cast</h2>
 
           <div className="dc-cast-grid grid grid-cols-3 gap-4 md:grid-cols-5 lg:grid-cols-6">
             {cast.map((actor) => (
@@ -245,8 +245,8 @@ export default function MovieDetails() {
       )}
 
       {similarMovies.length > 0 && (
-        <div className="dc-detail-section mx-auto max-w-7xl px-6 pb-10">
-          <h2 className="mb-5 text-xl font-bold">🎬 Similar Movies</h2>
+        <div className="dc-detail-section dc-similar-section mx-auto max-w-7xl px-6 pb-10">
+          <h2 className="dc-detail-section-title mb-5 text-xl font-bold">Similar films</h2>
 
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-cm-bg to-transparent" />
