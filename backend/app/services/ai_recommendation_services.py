@@ -92,22 +92,23 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
         for (genre_id,) in watched_genres:
             genre_weights[genre_id] += 1.0
 
+    feedback_movie_ids = rated_movie_ids | watchlist_movie_ids
+    feedback_genres = defaultdict(list)
+    if feedback_movie_ids:
+        feedback_rows = db.query(
+            MovieGenre.movie_id, MovieGenre.genre_id
+        ).filter(MovieGenre.movie_id.in_(feedback_movie_ids)).all()
+        for movie_id, genre_id in feedback_rows:
+            feedback_genres[movie_id].append(genre_id)
+
     for rating in ratings:
-        # A 1-star rating is a stronger negative signal than a 2-star rating.
-        weight = float(rating.value - 3)
-        if weight == 0:
-            continue
-        movie_genres = db.query(MovieGenre.genre_id).filter(
-            MovieGenre.movie_id == rating.movie_id
-        ).all()
-        for (genre_id,) in movie_genres:
-            genre_weights[genre_id] += weight * 1.5
+        # 4-5 stars strengthen a genre; 1-2 stars weaken it; 3 is neutral.
+        weight = float(rating.value - 3) * 1.5
+        for genre_id in feedback_genres.get(rating.movie_id, []):
+            genre_weights[genre_id] += weight
 
     for item in watchlist_items:
-        movie_genres = db.query(MovieGenre.genre_id).filter(
-            MovieGenre.movie_id == item.movie_id
-        ).all()
-        for (genre_id,) in movie_genres:
+        for genre_id in feedback_genres.get(item.movie_id, []):
             genre_weights[genre_id] += 1.5
 
     # Disliked titles are never recommended back to the user.
