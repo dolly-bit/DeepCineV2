@@ -564,3 +564,14 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 .dc-trending-carousel { scroll-behavior:smooth; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
 .dc-trending-carousel > .dc-movie-card { scroll-snap-align:start; }
 @media(max-width:520px) { .dc-trending-tools { gap:5px; }.dc-trending-tools button { width:29px;height:29px; }.dc-trending-count { margin-right:3px; } }
+
+
+/* Landing page: seamless, continuous horizontal movie carousel. */
+.dc-trending-viewport { width:100%; overflow:hidden; position:relative; }
+.dc-trending-track.dc-trending-auto { display:flex; width:max-content; gap:16px; overflow:visible; padding:5px 3px 18px; animation:dc-trending-loop 42s linear infinite; will-change:transform; }
+.dc-trending-track.dc-trending-auto:hover { animation-play-state:paused; }
+.dc-trending-item { flex:0 0 145px; width:145px; }
+.dc-trending-item .dc-movie-card { width:100%; }
+@keyframes dc-trending-loop { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+@media(max-width:520px) { .dc-trending-item { flex-basis:125px; width:125px; } .dc-trending-track.dc-trending-auto { gap:13px; animation-duration:36s; } }
+@media(prefers-reduced-motion:reduce) { .dc-trending-track.dc-trending-auto { animation:none; overflow-x:auto; } }
