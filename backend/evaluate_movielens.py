@@ -492,7 +492,7 @@ def run(args):
 
         eligible_user_count = len(eligible)
         sampled_users = sample_evaluation_users(
-            eligible, sample_size=args.evaluation_users, seed=args.seed
+            eligible, sample_size=args.evaluation_users, seed=args.evaluation_seed
         )
         # Fit ALS and all train-derived popularity statistics on the full
         # eligible training population. Only materialize per-user rankings for
@@ -503,12 +503,12 @@ def run(args):
         overlap_movies = [catalog_by_id[item] for item in sorted(overlap_ids)]
         signals = build_signal_rankings(
             db, train, overlap_movies, max(args.ks),
-            als_factors=args.als_factors, seed=args.seed,
+            als_factors=args.als_factors, seed=args.als_seed,
             ranking_users=sampled_users,
         )
 
         # Validation-only weight selection. Test labels are not passed here.
-        tuning = tune_hybrid_weights(signals, validation, args.ks, overlap_ids, seed=args.seed)
+        tuning = tune_hybrid_weights(signals, validation, args.ks, overlap_ids, seed=args.tuning_seed)
         hybrid = fuse_hybrid(signals, tuning["weights"], max(args.ks) * 10)
 
         final_rankings = {
@@ -525,13 +525,27 @@ def run(args):
             name: rankings for name, rankings in final_rankings.items()
         }
         validation_metrics = {
-            name: evaluate_rankings(rankings, validation, overlap_ids, args.ks)
+            name: evaluate_rankings(rankings, validation, overlap_ids, args.ks, bootstrap_seed=args.bootstrap_seed)
             for name, rankings in validation_rankings.items()
         }
         test_metrics = {
-            name: evaluate_rankings(rankings, test, overlap_ids, args.ks)
+            name: evaluate_rankings(rankings, test, overlap_ids, args.ks, bootstrap_seed=args.bootstrap_seed)
             for name, rankings in final_rankings.items()
         }
+
+        paired_comparisons = {}
+        for k in args.ks:
+            hybrid_user = per_user_ranking_metrics(hybrid, test, k)
+            popularity_user = per_user_ranking_metrics(
+                signals["global_popularity"], test, k
+            )
+            paired_comparisons[str(k)] = {
+                metric: paired_bootstrap_difference_ci(
+                    hybrid_user, popularity_user, metric,
+                    seed=args.bootstrap_seed + 300 + k + offset,
+                )
+                for offset, metric in enumerate(("precision", "recall", "ndcg"))
+            }
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -560,13 +574,17 @@ def run(args):
                 "evaluation_users_sampled": len(sampled_users),
                 "evaluation_user_sample_size_requested": args.evaluation_users,
                 "evaluation_user_sample_method": "seeded uniform sample without replacement",
+                "evaluation_seed": args.evaluation_seed,
                 "model_fit_train_users": len(train),
                 "model_fit_train_interactions": sum(map(len, train.values())),
                 "evaluation_validation_interactions": sum(map(len, validation.values())),
                 "evaluation_test_interactions": sum(map(len, test.values())),
             },
             "reproducibility": {
-                "seed": args.seed,
+                "evaluation_seed": args.evaluation_seed,
+                "als_seed": args.als_seed,
+                "tuning_seed": args.tuning_seed,
+                "bootstrap_seed": args.bootstrap_seed,
                 "als_factors": args.als_factors,
                 "als_iterations": 20,
                 "als_regularization": 0.05,
@@ -586,9 +604,11 @@ def run(args):
                 "training_population": "all eligible users",
                 "evaluation_users_sampled": len(sampled_users),
                 "objective": tuning["objective"],
+                "confidence_intervals": "95% percentile bootstrap over sampled users; 1000 resamples",
             },
             "validation_metrics": validation_metrics,
             "test_metrics": test_metrics,
+            "paired_test_difference_hybrid_minus_global_popularity_ci95": paired_comparisons,
             "limitations": [
                 "Results apply only to the MovieLens/DeepCine overlapping catalog, not the full DeepCine catalog.",
                 "Ratings >= threshold are implicit positives; this is not explicit rating prediction.",
@@ -596,13 +616,14 @@ def run(args):
                 "Per-user chronological splitting is not a global calendar-time split.",
                 "Personalized popularity uses training-only genre affinity and item interaction counts.",
                 "The final test partition must not be used to select weights or model settings.",
+                "Bootstrap intervals quantify uncertainty across sampled users for this run; repeated seeds are still required to assess run-to-run stability.",
                 "Metrics are estimated on a seeded uniform sample of eligible users, not the full eligible population.",
             ],
         }
 
-        json_path = OUTPUT_DIR / f"movielens_phase3_{timestamp}.json"
+        json_path = OUTPUT_DIR / f"movielens_phase4_{timestamp}.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        csv_path = OUTPUT_DIR / f"movielens_phase3_{timestamp}.csv"
+        csv_path = OUTPUT_DIR / f"movielens_phase4_{timestamp}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow([
@@ -637,13 +658,21 @@ def parse_args():
     parser.add_argument("--chunksize", type=int, default=500_000)
     parser.add_argument("--ks", default="5,10,20")
     parser.add_argument("--als-factors", type=int, default=64)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=42, help="legacy seed; fallback for all phase-4 seeds")
+    parser.add_argument("--evaluation-seed", type=int, default=None)
+    parser.add_argument("--als-seed", type=int, default=None)
+    parser.add_argument("--tuning-seed", type=int, default=None)
+    parser.add_argument("--bootstrap-seed", type=int, default=None)
     parser.add_argument(
         "--evaluation-users", type=int,
         default=DEFAULT_EVALUATION_USER_SAMPLE_SIZE,
         help="maximum eligible users to evaluate (seeded uniform sample; default: 2000)",
     )
     args = parser.parse_args()
+    args.evaluation_seed = args.seed if args.evaluation_seed is None else args.evaluation_seed
+    args.als_seed = args.seed if args.als_seed is None else args.als_seed
+    args.tuning_seed = args.seed if args.tuning_seed is None else args.tuning_seed
+    args.bootstrap_seed = args.seed if args.bootstrap_seed is None else args.bootstrap_seed
     ratios = (args.train_ratio, args.validation_ratio, args.test_ratio)
     if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
         parser.error("train/validation/test ratios must be positive and sum to 1")
