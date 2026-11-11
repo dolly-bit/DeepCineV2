@@ -1,35 +1,25 @@
-# MovieLens offline recommender benchmark
+# MovieLens Phase 2 evaluation
 
-This benchmark evaluates DeepCine's current catalog against MovieLens ratings.
-It is intentionally isolated from the production `watch_history` table.
-
-## Run
-
-From the `backend/` directory with the backend virtual environment active:
+Run from `backend/` with the project virtual environment active:
 
 ```powershell
 python -m pip install -r requirements.txt
+python -m pytest tests/test_evaluate_movielens.py -q
 python evaluate_movielens.py --ratings-path ../datasets/movielens/ratings.csv --links-path ../datasets/movielens/links.csv --ks 5,10,20
 ```
 
-The script streams `ratings.csv` in chunks (default 500,000 rows), maps MovieLens `movieId` to TMDB IDs using `links.csv`, and keeps only movies present in the local DeepCine catalog.
+The script streams MovieLens ratings, maps movie IDs to the current DeepCine catalog, and keeps the latest rating for each user/movie pair before applying the positive threshold.
 
-## Methodology
+## Phase 2 methodology
 
-1. Keep the latest rating for each user/movie pair.
-2. Treat ratings greater than or equal to 4.0 as positive implicit feedback (configurable).
-3. Split each eligible user's positive interactions chronologically; the latest fraction is test.
-4. Restrict both recommendations and held-out ground truth to the MovieLens/DeepCine catalog overlap.
-5. Fit ALS and construct interaction-derived user profiles from training interactions only.
-6. Compare MovieLens-positive popularity, metadata content, ALS collaborative, and reciprocal-rank-fusion hybrid recommenders.
-7. Report macro Precision@K, Recall@K, NDCG@K, and catalog Coverage@K.
+- Per-user chronological 60/20/20 train/validation/test split. Users need at least three positive catalog interactions.
+- ALS, content user profiles, popularity counts, and genre profiles are built from training interactions only.
+- Baselines: global training popularity, personalized popularity using training-derived genre affinity, content, ALS collaborative.
+- RRF weights are selected by a deterministic grid search using validation NDCG@10 (or the largest requested K if K=10 is absent).
+- The held-out test partition is used only for final reporting; it does not select weights.
+- ALS uses a fixed seed and BLAS thread pools are limited to one during fitting/scoring.
+- JSON and CSV include split sizes, tuning configuration, validation metrics, and final test metrics.
 
-Results are written to `evaluation/results/` as timestamped JSON and CSV files.
+## Important interpretation
 
-## Interpretation caveats
-
-- The benchmark is limited to the overlapping catalog, not all DeepCine movies.
-- This is implicit top-N retrieval evaluation, not rating prediction.
-- MovieLens users are not DeepCine users. Never import these interactions into production watch history.
-- The hybrid weights are fixed; tune them only on a validation split, never on the final test set.
-- Compare against baselines and report the exact dataset, threshold, split, and catalog size with every result.
+The candidate universe remains the MovieLens/DeepCine overlap, not the full 414-title catalog. This is implicit top-N retrieval evaluation, not rating prediction. It is a per-user chronological split, not a global calendar-time split. Do not use test metrics to tune weights.
