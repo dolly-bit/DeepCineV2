@@ -18,9 +18,9 @@ function CastAvatar({ actor }) {
   const showFallback = !actor.profile_url || failed;
 
   return (
-    <div className="text-center">
+    <div className="dc-cast-card text-center">
       {showFallback ? (
-        <div className="flex h-40 w-full items-center justify-center rounded-lg bg-cm-surface-2">
+        <div className="dc-cast-photo flex w-full items-center justify-center rounded-lg bg-cm-surface-2">
           <span className="text-2xl font-black text-white/25">
             {actor.name?.charAt(0)?.toUpperCase() || "?"}
           </span>
@@ -31,7 +31,7 @@ function CastAvatar({ actor }) {
           alt={actor.name}
           loading="lazy"
           onError={() => setFailed(true)}
-          className="h-40 w-full rounded-lg object-cover"
+          className="dc-cast-photo w-full rounded-lg object-cover"
         />
       )}
 
@@ -114,7 +114,7 @@ export default function MovieDetails() {
   return (
     <div className="min-h-screen bg-cm-bg text-white">
       {/* Backdrop */}
-      <div className="dc-detail-hero relative min-h-[680px] lg:min-h-[700px]">
+      <div className="dc-detail-hero relative">
         <BackdropImage
           src={movie.backdrop_url}
           title={movie.title}
@@ -129,7 +129,7 @@ export default function MovieDetails() {
           <ArrowLeft size={18} />
         </button>
 
-        <div className="relative z-10 mx-auto flex min-h-[680px] max-w-7xl items-center gap-7 px-6 py-12 lg:min-h-[700px]">
+        <div className="dc-detail-layout relative z-10 mx-auto flex max-w-7xl items-center gap-8 px-6">
           <PosterImage
             src={movie.poster_url}
             title={movie.title}
@@ -137,7 +137,7 @@ export default function MovieDetails() {
             imgClassName="w-48 rounded-xl object-cover shadow-2xl"
           />
 
-          <div className="max-w-3xl">
+          <div className="dc-detail-copy min-w-0">
             <h1 className="text-3xl font-extrabold md:text-4xl">{movie.title}</h1>
 
             {movie.tagline && (
@@ -236,7 +236,7 @@ export default function MovieDetails() {
         <div className="dc-detail-section mx-auto max-w-7xl px-6 py-8">
           <h2 className="mb-5 text-xl font-bold">🎭 Cast</h2>
 
-          <div className="grid grid-cols-3 gap-4 md:grid-cols-5 lg:grid-cols-6">
+          <div className="dc-cast-grid grid grid-cols-3 gap-4 md:grid-cols-5 lg:grid-cols-6">
             {cast.map((actor) => (
               <CastAvatar key={actor.id} actor={actor} />
             ))}
