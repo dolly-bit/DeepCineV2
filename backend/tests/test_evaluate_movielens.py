@@ -1,6 +1,8 @@
 from evaluate_movielens import (
     build_temporal_split,
     evaluate_rankings,
+    bootstrap_mean_ci,
+    paired_bootstrap_difference_ci,
     load_latest_ratings,
     load_movie_mapping,
     sample_evaluation_users,
@@ -107,3 +109,32 @@ def test_ranking_user_subset_rejects_unknown_users():
     import pytest
     with pytest.raises(ValueError):
         select_ranking_users({1: {10}}, [2])
+
+
+def test_bootstrap_mean_ci_is_deterministic_and_contains_constant_mean():
+    first = bootstrap_mean_ci([0.5, 0.5, 0.5], seed=17, samples=200)
+    second = bootstrap_mean_ci([0.5, 0.5, 0.5], seed=17, samples=200)
+    assert first == second == {"lower": 0.5, "upper": 0.5}
+
+
+def test_paired_bootstrap_difference_uses_matching_users():
+    left = {
+        1: {"ndcg": 0.8},
+        2: {"ndcg": 0.6},
+        3: {"ndcg": 0.4},
+    }
+    right = {
+        1: {"ndcg": 0.5},
+        2: {"ndcg": 0.4},
+        3: {"ndcg": 0.2},
+    }
+    ci = paired_bootstrap_difference_ci(left, right, "ndcg", seed=3, samples=200)
+    assert ci == {"lower": 0.2, "upper": 0.2}
+
+
+def test_evaluate_rankings_can_skip_bootstrap_for_tuning():
+    metrics = evaluate_rankings(
+        {1: [10]}, {1: {10}}, {10, 20}, [1], include_ci=False
+    )
+    assert metrics["1"]["ndcg"] == 1.0
+    assert "ndcg_ci95" not in metrics["1"]
