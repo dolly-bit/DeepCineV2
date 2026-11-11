@@ -1467,3 +1467,33 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 .dc-movie-page .dc-feedback-message { color:#75e5ed; }
 .dc-movie-page .dc-cast-card { border-color:rgba(54,220,232,.13); }
 .dc-movie-page .dc-cast-card:hover { border-color:rgba(54,220,232,.4); }
+
+
+/* Unified Movie Collections tabs */
+.dc-movie-collection-tabs {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:24px 0 22px;
+  padding-bottom:12px;
+  border-bottom:1px solid rgba(54,220,232,.14);
+}
+.dc-movie-collection-tabs button {
+  padding:10px 16px;
+  border:1px solid rgba(54,220,232,.18);
+  border-radius:8px;
+  background:rgba(20,151,190,.06);
+  color:#aab9bf;
+  font-size:13px;
+  font-weight:650;
+  transition:background .18s ease,color .18s ease,border-color .18s ease;
+}
+.dc-movie-collection-tabs button:hover {
+  border-color:rgba(54,220,232,.48);
+  color:#d8f8fa;
+}
+.dc-movie-collection-tabs button.active {
+  border-color:#36dce8;
+  background:linear-gradient(135deg,rgba(54,220,232,.2),rgba(22,141,187,.2));
+  color:#65e9ef;
+}
