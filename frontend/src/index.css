@@ -222,3 +222,11 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 
 .dc-trending-section { width:min(1320px,100%); margin:-28px auto 0; padding:0 clamp(22px,6vw,90px) 55px; position:relative; z-index:2; }.dc-trending-heading { display:flex; align-items:end; justify-content:space-between; gap:18px; margin-bottom:20px; }.dc-trending-heading h2 { margin:7px 0 0; color:#f1f0e9; font-family:Georgia,serif; font-size:30px; font-weight:500; letter-spacing:-.04em; }.dc-trending-heading h2 span { color:var(--dc-lime); }.dc-trending-count { color:#81877c; font-size:8px; font-weight:900; letter-spacing:.16em; }.dc-trending-track { display:flex; gap:16px; overflow-x:auto; padding:5px 3px 18px; scrollbar-width:none; }.dc-trending-track::-webkit-scrollbar { display:none; }.dc-trending-track>.dc-movie-card,.dc-trending-track>.dc-movie-skeleton { flex:0 0 145px; }.dc-trending-empty { padding:28px; border:1px dashed #ffffff22; border-radius:8px; color:#9ca195; font-size:12px; }.dc-trending-more { display:flex; align-items:center; gap:7px; margin-top:10px; color:var(--dc-lime); font-size:10px; font-weight:900; letter-spacing:.04em; }.dc-trending-more:hover { gap:12px; }
 @media(max-width:520px){.dc-trending-section{margin-top:-18px;padding-bottom:38px}.dc-trending-heading h2{font-size:25px}.dc-trending-count{max-width:95px;text-align:right;line-height:1.5}.dc-trending-track>.dc-movie-card,.dc-trending-track>.dc-movie-skeleton{flex-basis:125px}}
+
+
+/* Compact poster sizing scoped to the Similar Movies rail. */
+.dc-similar-track { display:flex; gap:16px; overflow-x:auto; padding:5px 3px 16px; scroll-behavior:smooth; scrollbar-width:none; }
+.dc-similar-track::-webkit-scrollbar { display:none; }
+.dc-similar-card { flex:0 0 155px; width:155px; min-width:0; }
+.dc-similar-card .dc-movie-card { width:100%; }
+@media(max-width:850px) { .dc-similar-card { flex-basis:138px; width:138px; } }
