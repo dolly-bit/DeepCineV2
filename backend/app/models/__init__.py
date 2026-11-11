@@ -4,3 +4,5 @@ from .genre import Genre
 from .movie_genre import MovieGenre
 from .watch_history import WatchHistory
 from .search_history import SearchHistory
+from .rating import Rating
+from .watchlist import WatchlistItem

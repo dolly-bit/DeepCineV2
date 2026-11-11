@@ -6,23 +6,28 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.connection import Base, engine
 from app.core.config import settings
-from app.models import User, Movie, Genre, MovieGenre, WatchHistory, SearchHistory
+from app.models import (
+    User, Movie, Genre, MovieGenre, WatchHistory, SearchHistory,
+    Rating, WatchlistItem,
+)
 from app.routes.auth import router as auth_router
 from app.routes.movies import router as movies_router
 from app.routes.recommend import router as recommend_router
 from app.routes.watch_history import router as watch_history_router
 from app.routes.search_history import router as search_history_router
+from app.routes.ratings import router as ratings_router
+from app.routes.watchlist import router as watchlist_router
 from app.routes.admin import router as admin_router
 from app.services.tmdb.movies import (
-    get_trending_movies,
-    get_top_rated_movies,
-    get_upcoming_movies,
+    get_trending_movies, get_top_rated_movies, get_upcoming_movies,
 )
 from app.services.tmdb.client import aclose_client
 from app.schedular.schedular import start_scheduler, stop_scheduler
 
 logger = logging.getLogger("deepcine")
 
+# Existing project startup behavior creates missing tables on boot.
+# New Rating/WatchlistItem models are imported above so their tables are registered.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -44,22 +49,13 @@ app.include_router(movies_router)
 app.include_router(recommend_router)
 app.include_router(watch_history_router)
 app.include_router(search_history_router)
+app.include_router(ratings_router)
+app.include_router(watchlist_router)
 app.include_router(admin_router)
 
 
 @app.on_event("startup")
 async def warm_up_caches():
-    """
-    Fire-and-forget cache warm-up.
-
-    This does NOT block server startup (the server starts accepting
-    requests immediately), it just kicks off the trending/top-rated/
-    upcoming TMDB calls in the background so that by the time the first
-    real visitor loads the home page a few hundred ms later, those
-    endpoints are usually already served from cache instead of a cold
-    TMDB round trip.
-    """
-
     async def _warm():
         try:
             await asyncio.gather(
@@ -68,16 +64,10 @@ async def warm_up_caches():
                 get_upcoming_movies(),
             )
             logger.info("TMDB cache warm-up complete.")
-        except Exception as exc:  # pragma: no cover - best-effort only
+        except Exception as exc:  # pragma: no cover
             logger.warning("TMDB cache warm-up failed: %s", exc)
 
     asyncio.create_task(_warm())
-
-    # Starts the background scheduler that keeps the movie catalog fresh
-    # automatically (daily re-import + recommendation index rebuild).
-    # BackgroundScheduler.start() is synchronous but effectively instant
-    # (it just spins up its own worker thread) - it does not block
-    # startup or wait for the first job to run.
     start_scheduler()
 
 
