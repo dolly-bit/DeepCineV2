@@ -2,10 +2,10 @@ import { Compass, Home, Library, Sparkles, Film, Search } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 const items = [
   { label: "Home", to: "/home", icon: Home, end: true },
+  { label: "Movie Collections", to: "/movies", icon: Film, state: { mode: "trending", title: "Movie Collections" } },
   { label: "Explore", to: "/discover", icon: Compass },
   { label: "AI Picks", to: "/recommend", icon: Sparkles },
   { label: "My Library", to: "/library", icon: Library },
-  { label: "Movie Collections", to: "/movies", icon: Film, state: { mode: "recent", title: "Movie Collections" } },
 ];
 export default function HomeSidebar() {
   const navigate = useNavigate();
