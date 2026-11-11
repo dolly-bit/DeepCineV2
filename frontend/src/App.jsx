@@ -11,6 +11,7 @@ import MovieDetails from "./pages/MovieDetails";
 import SearchPage  from "./pages/Search";
 import MoviesListPage from "./pages/MoviesListPage";
 import Profile from "./pages/Profile";
+import Library from "./pages/Library";
 import Discover from "./pages/Discover";
 import { isAuthenticated } from "./services/auth";
 
@@ -73,6 +74,8 @@ export default function App() {
     />
 
     <Route path="/discover" element={<Discover />} />
+
+    <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
 
 
   </Routes>
