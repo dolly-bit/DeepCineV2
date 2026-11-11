@@ -15,16 +15,12 @@ account exists.
 
 from fastapi import APIRouter, Header, HTTPException
 from sqlalchemy.orm import Session
-import httpx
 
 from app.core.config import settings
 from app.database.connection import SessionLocal
-from app.services.tmdb.movies import import_popular_movies, TMDBAuthError
+from app.services.tmdb.movies import import_catalog_movies, TMDBAuthError
 from app.services.tmdb.genres import import_genres
-from app.models.movie import Movie
-from app.models.genre import Genre
-from app.models.movie_genre import MovieGenre
-from app.services.tmdb.details import get_movie_details
+from app.services.tmdb.genres import import_genres
 from ai.index_builder import build_recommendation_index
 from ai.recommender import invalidate_index_cache
 from app.services.tmdb.client import TMDB_CACHE
@@ -52,17 +48,14 @@ def _check_token(x_admin_token: str | None):
 @router.post("/seed")
 async def seed_database(x_admin_token: str | None = Header(default=None)):
     """
-    Runs the full seed pipeline against the live database:
-    import movies -> import genres -> link them -> build the
-    recommendation index. Equivalent to running all four local scripts
+    Imports up to 10,000 TMDB discover results with genre links, then builds the recommendation index. Equivalent to running all four local scripts
     in order, but over HTTP.
 
     Usage (replace with your real values):
         curl -X POST https://your-api.onrender.com/admin/seed \\
              -H "X-Admin-Token: <your ADMIN_TASK_TOKEN>"
 
-    Safe to re-run - existing movies get their stats refreshed rather
-    than duplicated (see import_popular_movies).
+    Safe to rerun - existing TMDB IDs are updated rather than duplicated.
     """
     _check_token(x_admin_token)
 
@@ -71,76 +64,10 @@ async def seed_database(x_admin_token: str | None = Header(default=None)):
 
     try:
         try:
-            new_movies = await import_popular_movies(db, pages=25)
-            result["new_movies"] = new_movies
-
-            new_genres = await import_genres(db)
-            result["new_genres"] = new_genres
-
-            # Link movies to genres (same logic as link_movie_genres.py)
-            movies = db.query(Movie).all()
-            links_created = 0
-
-            for movie in movies:
-                if not movie.tmdb_id:
-                    continue
-
-                try:
-                    details = await get_movie_details(movie.tmdb_id)
-                except (httpx.HTTPStatusError, httpx.HTTPError):
-                    # One movie's details failing (rate limit, TMDB
-                    # hiccup) shouldn't abort the whole run - skip it,
-                    # same as the offline link_movie_genres.py script.
-                    continue
-
-                for g in details.get("genres", []):
-                    tmdb_genre_id = g.get("id")
-                    if not tmdb_genre_id:
-                        continue
-
-                    genre = db.query(Genre).filter(Genre.tmdb_id == tmdb_genre_id).first()
-                    if not genre:
-                        genre = Genre(tmdb_id=tmdb_genre_id, name=g.get("name"))
-                        db.add(genre)
-                        db.flush()
-
-                    existing = (
-                        db.query(MovieGenre)
-                        .filter(MovieGenre.movie_id == movie.id, MovieGenre.genre_id == genre.id)
-                        .first()
-                    )
-                    if existing:
-                        continue
-
-                    db.add(MovieGenre(movie_id=movie.id, genre_id=genre.id))
-                    links_created += 1
-
-            db.commit()
-            result["genre_links_created"] = links_created
-
+            await import_genres(db)
+            result.update(await import_catalog_movies(db, target_count=10_000))
         except TMDBAuthError as e:
             raise HTTPException(status_code=502, detail=str(e))
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in (401, 403):
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        "TMDB rejected the request "
-                        f"({e.response.status_code}). Check that "
-                        "TMDB_ACCESS_TOKEN is set correctly in this "
-                        "service's environment variables (the long 'API "
-                        "Read Access Token', not the short API key)."
-                    ),
-                )
-            raise HTTPException(
-                status_code=502,
-                detail=f"TMDB error {e.response.status_code} while seeding.",
-            )
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Network error reaching TMDB: {e}",
-            )
 
         # Rebuild the recommendation index and invalidate in-memory caches
         indexed = build_recommendation_index(db, verbose=False)
