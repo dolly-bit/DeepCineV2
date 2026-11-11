@@ -3,6 +3,7 @@ from evaluate_movielens import (
     evaluate_rankings,
     load_latest_ratings,
     load_movie_mapping,
+    sample_evaluation_users,
     tune_hybrid_weights,
 )
 
@@ -72,3 +73,23 @@ def test_validation_tuning_uses_validation_labels_and_returns_weights():
     assert result["configurations_tested"] == 81
     assert result["tuning_users_sampled"] == 2
     assert result["objective"].startswith("validation_ndcg_at_")
+
+
+
+def test_evaluation_user_sample_is_deterministic_and_bounded():
+    users = set(range(100))
+    first = sample_evaluation_users(users, sample_size=12, seed=7)
+    second = sample_evaluation_users(users, sample_size=12, seed=7)
+    assert first == second
+    assert len(first) == 12
+    assert set(first).issubset(users)
+
+
+def test_evaluation_user_sample_keeps_all_when_under_limit():
+    assert sample_evaluation_users({3, 1, 2}, sample_size=10) == [1, 2, 3]
+
+
+def test_evaluation_user_sample_rejects_non_positive_limit():
+    import pytest
+    with pytest.raises(ValueError):
+        sample_evaluation_users({1, 2}, sample_size=0)
