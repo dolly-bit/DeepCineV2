@@ -618,3 +618,27 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 @media(max-width:850px) {
   .poster-orbit { transform:scale(.9); transform-origin:left top; margin-bottom:-18px; }
 }
+
+
+/* Signup/login poster collage: medium, clearly legible poster sizing. */
+@media(min-width:851px) {
+  .poster-orbit { height:230px; margin-top:20px; transform:scale(1.28); transform-origin:left top; }
+  .orbit-poster { width:142px; height:204px; }
+  .orbit-poster-1 { left:8px; }
+  .orbit-poster-2 { left:120px; top:22px; }
+  .orbit-poster-3 { left:238px; top:4px; }
+  .orbit-poster-4 { left:356px; top:20px; }
+  .orbit-center { left:185px; top:72px; }
+}
+@media(min-width:851px) and (max-height:760px) {
+  .poster-orbit { height:205px; transform:scale(1.12); }
+  .orbit-poster { width:130px; height:186px; }
+}
+@media(max-width:850px) {
+  .poster-orbit { transform:scale(1); transform-origin:left top; margin-bottom:0; }
+  .orbit-poster { width:116px; height:166px; }
+}
+@media(max-width:520px) {
+  .poster-orbit { transform:scale(.88); transform-origin:left top; margin-bottom:-18px; }
+  .orbit-poster { width:105px; height:151px; }
+}
