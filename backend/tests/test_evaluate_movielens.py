@@ -69,5 +69,6 @@ def test_validation_tuning_uses_validation_labels_and_returns_weights():
     validation = {1: {10}, 2: {20}}
     result = tune_hybrid_weights(signals, validation, [1, 2], {10, 11, 12, 20, 21, 22})
     assert set(result["weights"]) == {"content", "collaborative", "genre", "popularity"}
-    assert result["configurations_tested"] == 256
+    assert result["configurations_tested"] == 81
+    assert result["tuning_users_sampled"] == 2
     assert result["objective"].startswith("validation_ndcg_at_")
