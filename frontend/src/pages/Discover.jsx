@@ -22,7 +22,7 @@ export default function Discover() {
   // Pre-select a mood when arriving from the Home page's "Browse by
   // mood" section (navigate("/discover", { state: { mood: key } })).
   const [activeMood, setActiveMood] = useState(location.state?.mood || null);
-  const [activeGenres, setActiveGenres] = useState([]);
+  const [activeGenres, setActiveGenres] = useState(location.state?.genreId ? [location.state.genreId] : []);
   const [activeLanguage, setActiveLanguage] = useState(null);
 
   const [movies, setMovies] = useState([]);
