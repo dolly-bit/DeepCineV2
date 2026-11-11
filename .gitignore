@@ -53,3 +53,6 @@ frontend/.vite/
 # OS
 .DS_Store
 Thumbs.db
+# Local benchmark inputs and generated outputs (keep large/raw data out of Git)
+/datasets/
+/backend/evaluation/results/
