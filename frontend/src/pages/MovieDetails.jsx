@@ -38,7 +38,6 @@ function CastAvatar({ actor }) {
 
       <h3 className="mt-2 text-sm font-semibold">{actor.name}</h3>
       <p className="text-xs text-cm-muted">{actor.character}</p>
-      </main>
     </div>
   );
 }
@@ -259,6 +258,7 @@ export default function MovieDetails() {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }
