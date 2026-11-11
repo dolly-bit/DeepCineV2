@@ -214,11 +214,7 @@ export default function MovieDetails() {
 
             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
               {similarMovies.map((similar) => (
-                <div
-                  key={similar.id}
-                  onClick={() => navigate(`/movie/${similar.id}`)}
-                  className="shrink-0 cursor-pointer"
-                >
+                <div key={similar.id} className="dc-similar-card">
                   <MovieCard movie={similar} />
                 </div>
               ))}
