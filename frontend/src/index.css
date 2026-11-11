@@ -1503,3 +1503,13 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
   .dc-movie-collection-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .dc-movie-collection-tabs button { text-align:center; }
 }
+
+
+/* Keep posters in the Search modal at compact carousel dimensions. */
+.dc-search-trending-track { align-items:flex-start; }
+.dc-search-trending-item { flex:0 0 158px; width:158px; min-width:158px; }
+.dc-search-trending-item > .dc-movie-card { width:100%; min-width:0; }
+.dc-search-trending-item .dc-movie-poster { width:100%; aspect-ratio:2/3; }
+@media(max-width:640px) {
+  .dc-search-trending-item { flex-basis:126px; width:126px; min-width:126px; }
+}
