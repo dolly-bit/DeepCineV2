@@ -1,11 +1,10 @@
-import { Compass, Heart, Home, Layers3, Sparkles, Star, Clock3, Search } from "lucide-react";
+import { Compass, Home, Library, Sparkles, Star, Clock3, Search } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 const items = [
   { label: "Home", to: "/home", icon: Home, end: true },
   { label: "Explore", to: "/discover", icon: Compass },
   { label: "AI Picks", to: "/recommend", icon: Sparkles },
-  { label: "Favourites", to: "/profile", icon: Heart },
-  { label: "My Collection", to: "/profile", icon: Layers3 },
+  { label: "My Library", to: "/library", icon: Library },
   { label: "Recently Added", to: "/movies", icon: Clock3, state: { mode: "recent", title: "Recently Added" } },
   { label: "Top Rated", to: "/movies", icon: Star, state: { mode: "top-rated", title: "Top Rated" } },
 ];
