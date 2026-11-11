@@ -209,8 +209,9 @@ def _normalize_rows(matrix):
 
 def build_signal_rankings(
     db, train, catalog_movies, ks_max, als_factors=64, seed=42,
+    ranking_users=None,
 ):
-    """Create signal rankings from train only, plus two popularity baselines."""
+    """Fit signals on all training users; materialize rankings only for selected users."""
     catalog_ids = {int(movie.tmdb_id) for movie in catalog_movies}
     movies = {int(movie.tmdb_id): movie for movie in catalog_movies}
     train = {u: (items & catalog_ids) for u, items in train.items()}
@@ -275,7 +276,13 @@ def build_signal_rankings(
     signals = {name: {} for name in signal_names}
     candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
 
-    for user, watched in train.items():
+    users_to_rank = sorted(train) if ranking_users is None else sorted(set(ranking_users))
+    missing_users = set(users_to_rank) - set(train)
+    if missing_users:
+        raise ValueError(f"ranking_users contains {len(missing_users)} users absent from train")
+
+    for user in users_to_rank:
+        watched = train[user]
         unseen = catalog_ids - watched
         global_pop = [i for i in global_popularity_order if i in unseen][:candidate_limit]
 
@@ -440,7 +447,9 @@ def run(args):
         sampled_users = sample_evaluation_users(
             eligible, sample_size=args.evaluation_users, seed=args.seed
         )
-        train = {u: train[u] & overlap_ids for u in sampled_users}
+        # Fit ALS and all train-derived popularity statistics on the full
+        # eligible training population. Only materialize per-user rankings for
+        # the sampled evaluation users to keep ranking work bounded.
         validation = {u: validation[u] & overlap_ids for u in sampled_users}
         test = {u: test[u] & overlap_ids for u in sampled_users}
 
@@ -448,6 +457,7 @@ def run(args):
         signals = build_signal_rankings(
             db, train, overlap_movies, max(args.ks),
             als_factors=args.als_factors, seed=args.seed,
+            ranking_users=sampled_users,
         )
 
         # Validation-only weight selection. Test labels are not passed here.
@@ -503,7 +513,8 @@ def run(args):
                 "evaluation_users_sampled": len(sampled_users),
                 "evaluation_user_sample_size_requested": args.evaluation_users,
                 "evaluation_user_sample_method": "seeded uniform sample without replacement",
-                "evaluation_train_interactions": sum(map(len, train.values())),
+                "model_fit_train_users": len(train),
+                "model_fit_train_interactions": sum(map(len, train.values())),
                 "evaluation_validation_interactions": sum(map(len, validation.values())),
                 "evaluation_test_interactions": sum(map(len, test.values())),
             },
@@ -520,10 +531,12 @@ def run(args):
                 "ks": args.ks,
                 "averaging": "macro average over the seeded sampled evaluation users",
                 "coverage_denominator": "MovieLens/DeepCine overlapping catalog",
-                "model_fit_data": "training partition only",
+                "model_fit_data": "full eligible training partition",
                 "weight_selection_data": "validation partition only",
                 "final_reporting_data": "held-out test partition only",
                 "evaluation_population": "seeded uniform sample of eligible users",
+                "ranking_population": "sampled evaluation users",
+                "training_population": "all eligible users",
                 "evaluation_users_sampled": len(sampled_users),
                 "objective": tuning["objective"],
             },
@@ -540,9 +553,9 @@ def run(args):
             ],
         }
 
-        json_path = OUTPUT_DIR / f"movielens_phase2_{timestamp}.json"
+        json_path = OUTPUT_DIR / f"movielens_phase3_{timestamp}.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        csv_path = OUTPUT_DIR / f"movielens_phase2_{timestamp}.csv"
+        csv_path = OUTPUT_DIR / f"movielens_phase3_{timestamp}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow([
