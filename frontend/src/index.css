@@ -642,3 +642,8 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
   .poster-orbit { transform:scale(.88); transform-origin:left top; margin-bottom:-18px; }
   .orbit-poster { width:105px; height:151px; }
 }
+
+
+/* Keep movie hero geometry stable when a rating/watchlist action reports status. */
+.dc-movie-feedback { align-content:start; }
+.dc-movie-feedback .dc-feedback-message { display:block; flex:0 0 100%; min-height:14px; line-height:14px; margin:0; }
