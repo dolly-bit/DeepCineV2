@@ -339,13 +339,20 @@ def fuse_hybrid(signal_rankings, weights, top_k):
     return hybrid
 
 
-def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog):
+def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed=42):
     """Select RRF weights on validation NDCG@10 (or largest available K)."""
     objective_k = 10 if 10 in ks else max(ks)
     # Tuning over every validation user for every grid point is needlessly
     # expensive at MovieLens scale. Use a deterministic, sorted user sample;
     # final validation/test reporting still uses every eligible user.
-    sampled_users = sorted(validation)[:TUNING_USER_SAMPLE_SIZE]
+    available_users = sorted(validation)
+    rng = np.random.default_rng(seed)
+    if len(available_users) > TUNING_USER_SAMPLE_SIZE:
+        sampled_users = sorted(
+            rng.choice(available_users, size=TUNING_USER_SAMPLE_SIZE, replace=False).tolist()
+        )
+    else:
+        sampled_users = available_users
     tuning_validation = {u: validation[u] for u in sampled_users}
     best = None
     tested = 0
@@ -370,7 +377,8 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog):
         "weight_grid": list(WEIGHT_GRID),
         "configurations_tested": tested,
         "tuning_users_sampled": len(sampled_users),
-        "tuning_user_sample_method": "first N users by sorted user ID; deterministic",
+        "tuning_user_sample_method": "seeded uniform sample without replacement",
+        "tuning_seed": seed,
         "validation_metrics_at_objective_k": best["metrics"],
     }
 
@@ -420,7 +428,7 @@ def run(args):
         )
 
         # Validation-only weight selection. Test labels are not passed here.
-        tuning = tune_hybrid_weights(signals, validation, args.ks, overlap_ids)
+        tuning = tune_hybrid_weights(signals, validation, args.ks, overlap_ids, seed=args.seed)
         hybrid = fuse_hybrid(signals, tuning["weights"], max(args.ks) * 10)
 
         final_rankings = {
