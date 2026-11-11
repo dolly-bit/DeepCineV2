@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { SlidersHorizontal, Sparkles, X, RotateCcw, Film, Languages, Clapperboard, ChevronDown } from "lucide-react";
+import { SlidersHorizontal, Sparkles, RotateCcw, Film, Languages, Clapperboard, ChevronDown } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import HomeSidebar from "../components/layout/HomeSidebar";
 import MovieCard from "../components/home/MovieCard";
