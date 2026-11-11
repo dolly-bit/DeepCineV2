@@ -9,7 +9,7 @@ class ReciprocalRankFusionTests(unittest.TestCase):
             "content": [10, 20, 30],
             "collaborative": [20, 40, 10],
         }, top_k=4)
-        self.assertEqual(ranked[0], 10 if ranked[0] == 10 else 20)
+        self.assertEqual(ranked[0], 20)
         self.assertEqual(set(ranked), {10, 20, 30, 40})
         self.assertEqual(len(ranked), 4)
 
