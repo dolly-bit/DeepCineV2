@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Calendar, Clock, Star, Play, Bookmark, Check, Search, Bell, UserRound, Clapperboard } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Calendar, Clock, Star, Play, Bookmark, Check } from "lucide-react";
+import HomeSidebar from "../components/layout/HomeSidebar";
 import {
   getMovieCast,
   getSimilarMovies,
@@ -38,6 +38,7 @@ function CastAvatar({ actor }) {
 
       <h3 className="mt-2 text-sm font-semibold">{actor.name}</h3>
       <p className="text-xs text-cm-muted">{actor.character}</p>
+      </main>
     </div>
   );
 }
@@ -113,18 +114,9 @@ export default function MovieDetails() {
   }
 
   return (
-    <div className="dc-movie-page min-h-screen bg-cm-bg text-white">
-      <header className="dc-movie-nav">
-        <Link to="/home" className="dc-movie-brand"><span className="dc-movie-brand-mark"><Clapperboard size={20}/></span><span>DEEP<span>CINE</span></span></Link>
-        <nav className="dc-movie-nav-links" aria-label="Main navigation">
-          <Link to="/home">Home</Link><Link to="/movies">Movies</Link><Link to="/discover">TV Shows</Link><Link to="/profile">My List</Link>
-        </nav>
-        <div className="dc-movie-nav-actions">
-          <Link to="/discover" aria-label="Search movies"><Search size={21}/></Link>
-          <button type="button" aria-label="Notifications"><Bell size={20}/><i/></button>
-          <Link to="/profile" className="dc-movie-avatar" aria-label="Profile"><UserRound size={19}/></Link>
-        </div>
-      </header>
+    <div className="dc-app-shell dc-movie-shell">
+      <HomeSidebar />
+      <main className="dc-app-main dc-movie-page min-h-screen bg-cm-bg text-white">
       {/* Backdrop */}
       <div className="dc-detail-hero relative">
         <BackdropImage
