@@ -45,7 +45,7 @@ def test_ranking_metrics_known_values():
 
 def test_evaluate_rankings_computes_macro_metrics_and_coverage():
     rankings = {1: [10, 20], 2: [20, 30]}
-    test = {1: {20}, 2: {99}}
+    test = {1: {10}, 2: {99}}
     metrics = evaluate_rankings(rankings, test, {10, 20, 30, 99}, [1])
     assert metrics["1"]["precision"] == 0.5
     assert metrics["1"]["recall"] == 0.5
