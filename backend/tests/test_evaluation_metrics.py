@@ -27,7 +27,7 @@ def test_temporal_holdout_keeps_latest_unique_items_for_test():
         Event(1, 30, start + timedelta(days=3), 4),
         Event(2, 40, start, 5),  # one-item users are excluded
     ]
-    train, test = temporal_holdout(events, test_ratio=0.34)
+    train, test = temporal_holdout(events, test_ratio=0.25)
     assert train == {1: {10, 20}}
     assert test == {1: {30}}
 
