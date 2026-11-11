@@ -1,109 +1,59 @@
-import { Sparkles, Search } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Film, Search, Menu, X, UserRound, LogOut, Compass, Sparkles } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import SearchModal from "../SearchModal";
-import { getAuthState } from "../../services/auth"
+import { clearAuthState, getAuthState } from "../../services/auth";
 
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
-
+  const [menuOpen, setMenuOpen] = useState(false);
   const { accessToken, userId, username } = getAuthState();
-  const isAuthenticated = Boolean(accessToken) && Boolean(userId) && userId !== "undefined";
+  const authenticated = Boolean(accessToken && userId && userId !== "undefined");
+
+  const go = (path) => { setMenuOpen(false); navigate(path); };
+  const signOut = () => { clearAuthState(); setMenuOpen(false); navigate("/", { replace: true }); };
+  const navItems = authenticated
+    ? [{ label: "For you", path: "/home" }, { label: "Discover", path: "/discover" }, { label: "AI picks", path: "/recommend" }, { label: "My list", path: "/profile" }]
+    : [{ label: "Discover", path: "/#trending" }, { label: "How it works", path: "/#how-it-works" }];
 
   return (
-    <nav className="sticky top-0 z-50 bg-[#08070C]/90 backdrop-blur-md border-b border-white/10">
-      <div className="max-w-7xl mx-auto flex items-center justify-between h-14 px-6 lg:px-10">
-
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2">
-          <Sparkles className="text-purple-400" size={16} />
-          <h1 className="text-lg font-bold tracking-wider text-white">
-            DeepCine
-          </h1>
+    <header className="dc-nav">
+      <div className="dc-nav-inner">
+        <Link to={authenticated ? "/home" : "/"} className="dc-brand">
+          <span className="dc-brand-mark"><Film size={18} /></span>
+          <span>DEEP<span>CINE</span></span>
         </Link>
 
-        {/* Menu */}
-        <div className="hidden md:flex items-center gap-6 text-sm text-gray-300">
+        <nav className="dc-nav-links" aria-label="Main navigation">
+          {navItems.map((item) => <Link key={item.label} className={location.pathname === item.path ? "active" : ""} to={item.path}>{item.label}</Link>)}
+          <button type="button" onClick={() => setSearchOpen(true)} className="inline-flex items-center gap-2"><Search size={14} /> Search</button>
+        </nav>
 
-          <button
-            type="button"
-            onClick={() => navigate("/movies", { state: { mode: "trending", title: "Trending Movies" } })}
-            className="hover:text-white"
-          >
-            Trending
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate("/discover")}
-            className="hover:text-white"
-          >
-            Discover
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate("/movies", { state: { mode: "recommended", title: "Recommended For You", query: "Avengers" } })}
-            className="hover:text-white"
-          >
-            AI Recommend
-          </button>
-
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="hover:text-white flex items-center gap-1.5 transition"
-          >
-            <Search size={14} />
-            Search
-          </button>
-
-        </div>
-
-        {/* Right Side */}
-        <div className="flex items-center gap-2.5">
-
-         
-           {!isAuthenticated ? (
+        <div className="dc-nav-actions">
+          {authenticated ? (
             <>
-              <button
-                onClick={() => navigate("/login")}
-                className="px-4 py-1.5 text-sm rounded-full bg-purple-600 hover:bg-purple-700 font-semibold transition"
-              >
-                Login
-              </button>
-
-              <button
-                onClick={() => navigate("/signup")}
-                className="px-4 py-1.5 text-sm rounded-full border border-purple-500 text-white hover:bg-purple-600 transition"
-              >
-                Sign Up
-              </button>
+              <button type="button" className="dc-nav-ghost" onClick={() => go("/profile")}><UserRound size={14} /> {username || "Account"}</button>
+              <button type="button" className="dc-nav-cta" onClick={signOut}>Sign out <LogOut size={14} /></button>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={() => navigate("/profile")}
-              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 transition hover:border-cm-purple/50 hover:bg-white/10"
-            >
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 text-[11px] font-bold text-white">
-                {(username || "U").charAt(0).toUpperCase()}
-              </div>
-              <span className="hidden sm:inline text-sm text-slate-200">
-                {username || "Account"}
-              </span>
-            </button>
+            <>
+              <Link to="/login" className="dc-nav-ghost">Sign in</Link>
+              <Link to="/signup" className="dc-nav-cta">Get started <Sparkles size={14} /></Link>
+            </>
           )}
-         
-
         </div>
 
+        <button type="button" className="dc-mobile-toggle" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{menuOpen ? <X size={22} /> : <Menu size={22} />}</button>
       </div>
-      <SearchModal
-      isOpen={searchOpen}
-      onClose={()=>
-        setSearchOpen(false)
-      }/>
-    </nav>
+
+      {menuOpen && <nav className="dc-mobile-menu" aria-label="Mobile navigation">
+        {navItems.map((item) => <Link key={item.label} to={item.path} onClick={() => setMenuOpen(false)}>{item.label}</Link>)}
+        <button type="button" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>Search movies</button>
+        {authenticated ? <><Link to="/profile" onClick={() => setMenuOpen(false)}>My profile</Link><button type="button" onClick={signOut}>Sign out</button></> : <><Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link><Link to="/signup" onClick={() => setMenuOpen(false)}>Create account</Link></>}
+      </nav>}
+      <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+    </header>
   );
 }
