@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Sparkles, Users, History, Search } from "lucide-react";
 
 import Navbar from "../components/layout/Navbar";
@@ -42,6 +42,19 @@ const HOW_IT_WORKS = [
   },
 ];
 
+function filterFutureMovies(movies) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return movies
+    .filter((movie) => {
+      if (!movie.release_date) return false;
+      const releaseDate = new Date(movie.release_date);
+      return !Number.isNaN(releaseDate.getTime()) && releaseDate >= today;
+    })
+    .sort((a, b) => new Date(a.release_date) - new Date(b.release_date));
+}
+
 export default function Home() {
   const [trending, setTrending] = useState([]);
   const [topRated, setTopRated] = useState([]);
@@ -51,20 +64,7 @@ export default function Home() {
 
   const { userId } = getAuthState();
 
-  const filterFutureMovies = (movies) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return movies
-      .filter((movie) => {
-        if (!movie.release_date) return false;
-        const releaseDate = new Date(movie.release_date);
-        return !Number.isNaN(releaseDate.getTime()) && releaseDate >= today;
-      })
-      .sort((a, b) => new Date(a.release_date) - new Date(b.release_date));
-  };
-
-  async function loadMovies() {
+  const loadMovies = useCallback(async () => {
     try {
       const [trend, top, up] = await Promise.all([
         getTrendingMovies(),
@@ -83,12 +83,11 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMovies();
-  }, []);
+  }, [loadMovies]);
 
   return (
     <div className="min-h-screen bg-[#08070C] text-white">
@@ -96,9 +95,6 @@ export default function Home() {
 
       <DashboardHero movies={trending} />
 
-      {/* System branding: makes it unmistakably clear this is a
-          personalized, collaborative-filtering-powered recommender,
-          not just a generic movie browser. */}
       <section className="max-w-7xl mx-auto px-6 mt-10">
         <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-purple-600/15 via-white/5 to-cyan-500/10 p-5 sm:p-6">
           <p className="text-[11px] uppercase tracking-[0.3em] text-purple-300">
