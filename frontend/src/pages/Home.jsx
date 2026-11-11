@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/layout/Navbar";
 import HomeSidebar from "../components/layout/HomeSidebar";
 import DashboardHero from "../components/home/DashboardHero";
@@ -12,12 +13,12 @@ function futureOnly(movies) {
   return movies.filter(m => m.release_date && new Date(m.release_date) >= today).sort((a,b)=>new Date(a.release_date)-new Date(b.release_date));
 }
 function Categories({ genres, loading }) {
-  const navigate = (genre) => window.dispatchEvent(new CustomEvent("deepcine:genre", { detail: genre }));
+  const navigate = useNavigate();
   return <aside className="dc-category-panel">
     <div className="dc-category-heading"><h2>Categories</h2><span>Browse genres</span></div>
     {loading ? <div className="dc-category-grid">{Array.from({length:8}).map((_,i)=><div className="dc-category-skeleton" key={i}/>)}</div> :
-      <div className="dc-category-grid">{genres.slice(0,8).map((g,i)=><button key={g.id} className={"dc-category-tile dc-category-"+i} onClick={()=>navigate(g)}><span>{g.name}</span></button>)}</div>}
-    <a className="dc-category-all" href="/discover">View all genres <span>→</span></a>
+      <div className="dc-category-grid">{genres.slice(0,8).map((g,i)=><button key={g.id} className={"dc-category-tile dc-category-"+i} onClick={()=>navigate("/discover",{state:{genreId:g.id}})}><span>{g.name}</span></button>)}</div>}
+    <button className="dc-category-all" onClick={()=>navigate("/discover")}>View all genres <span>→</span></button>
   </aside>;
 }
 export default function Home() {
