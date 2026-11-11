@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Calendar, Clock, Star, Play } from "lucide-react";
 import {
@@ -50,35 +50,37 @@ export default function MovieDetails() {
   const [cast, setCast] = useState([]);
   const [similarMovies, setSimilarMovies] = useState([]);
 
-  const loadMovie = useCallback(async () => {
-    try {
-      const [movieData, trailerData, castData, similarData] = await Promise.all([
-        getMovieDetails(id),
-        getMovieTrailer(id).catch(() => ({ url: null })),
-        getMovieCast(id).catch(() => []),
-        getSimilarMovies(id).catch(() => []),
-      ]);
-
-      setMovie(movieData);
-      setTrailer(trailerData?.url || null);
-      setCast(castData || []);
-      setSimilarMovies(similarData || []);
-
-      // This is the "watch_history" signal: opening a movie's details
-      // page (i.e. clicking "More Info" / a poster anywhere in the app)
-      // is what gets logged, and it's exactly what the collaborative-
-      // filtering model trains on later.
-      recordWatch(movieData.id);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
   useEffect(() => {
-    loadMovie();
-  }, [loadMovie]);
+    let cancelled = false;
+
+    Promise.all([
+      getMovieDetails(id),
+      getMovieTrailer(id).catch(() => ({ url: null })),
+      getMovieCast(id).catch(() => []),
+      getSimilarMovies(id).catch(() => []),
+    ])
+      .then(([movieData, trailerData, castData, similarData]) => {
+        if (cancelled) return;
+        setMovie(movieData);
+        setTrailer(trailerData?.url || null);
+        setCast(castData || []);
+        setSimilarMovies(similarData || []);
+
+        // Opening a movie details page is recorded as a watch-history signal.
+        recordWatch(movieData.id);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setMovie(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   if (loading) {
     return (
