@@ -134,7 +134,9 @@ export default function SearchModal({ isOpen, onClose }) {
             />
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close search"
             >
               <X
                 className="dc-search-modal-close"
