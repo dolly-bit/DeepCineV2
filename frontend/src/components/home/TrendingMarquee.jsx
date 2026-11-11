@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import MovieCard from "./MovieCard";
@@ -8,7 +8,7 @@ export default function TrendingMarquee({ movies = [], loading }) {
   const trackRef = useRef(null);
   const [paused, setPaused] = useState(false);
 
-  const move = (direction) => {
+  const move = useCallback((direction) => {
     const track = trackRef.current;
     if (!track) return;
     const card = track.querySelector(".dc-movie-card");
@@ -19,13 +19,13 @@ export default function TrendingMarquee({ movies = [], loading }) {
     } else {
       track.scrollBy({ left: direction * distance, behavior: "smooth" });
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (loading || movies.length < 2 || paused) return undefined;
     const timer = window.setInterval(() => move(1), 3500);
     return () => window.clearInterval(timer);
-  }, [loading, movies.length, paused]);
+  }, [loading, movies.length, paused, move]);
 
   return (
     <section id="trending" className="dc-trending-section">
