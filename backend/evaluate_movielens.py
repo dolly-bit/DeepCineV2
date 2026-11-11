@@ -207,6 +207,15 @@ def _normalize_rows(matrix):
     return matrix / np.maximum(norms, 1e-12)
 
 
+def select_ranking_users(train, ranking_users=None):
+    """Select users to score without changing the training population."""
+    users = sorted(train) if ranking_users is None else sorted(set(ranking_users))
+    missing = set(users) - set(train)
+    if missing:
+        raise ValueError(f"ranking_users contains {len(missing)} users absent from train")
+    return users
+
+
 def build_signal_rankings(
     db, train, catalog_movies, ks_max, als_factors=64, seed=42,
     ranking_users=None,
@@ -276,10 +285,7 @@ def build_signal_rankings(
     signals = {name: {} for name in signal_names}
     candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
 
-    users_to_rank = sorted(train) if ranking_users is None else sorted(set(ranking_users))
-    missing_users = set(users_to_rank) - set(train)
-    if missing_users:
-        raise ValueError(f"ranking_users contains {len(missing_users)} users absent from train")
+    users_to_rank = select_ranking_users(train, ranking_users)
 
     for user in users_to_rank:
         watched = train[user]
