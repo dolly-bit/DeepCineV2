@@ -672,3 +672,122 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
   line-height:14px;
   pointer-events:none;
 }
+
+
+/* Movie detail page — match the dark editorial DeepCine home design. */
+.dc-detail-hero {
+  isolation:isolate;
+  background:
+    linear-gradient(90deg,rgba(7,8,8,.97) 0%,rgba(7,8,8,.88) 42%,rgba(7,8,8,.38) 100%),
+    linear-gradient(0deg,#090a0b 0%,transparent 38%);
+}
+.dc-detail-hero > img { filter:saturate(.78) brightness(.7); }
+.dc-detail-hero h1 { color:var(--dc-paper); letter-spacing:-.045em; line-height:1.05; }
+.dc-detail-hero .text-cm-violet { color:var(--dc-lime); }
+.dc-detail-hero .text-slate-300 { color:#b9bbb2; }
+.dc-detail-genre {
+  border:1px solid rgba(200,241,105,.28);
+  background:rgba(200,241,105,.07);
+  color:#d9e8b5;
+}
+.dc-detail-primary {
+  border:1px solid rgba(200,241,105,.42);
+  background:var(--dc-lime);
+  color:#11140c;
+}
+.dc-detail-primary:hover { background:#d5f58a; }
+.dc-detail-secondary {
+  border:1px solid rgba(241,240,233,.16);
+  background:rgba(241,240,233,.07);
+  color:var(--dc-paper);
+}
+.dc-detail-secondary:hover { border-color:rgba(200,241,105,.4); color:var(--dc-lime); }
+.dc-detail-section { color:var(--dc-paper); }
+.dc-detail-section h2 { color:var(--dc-paper); letter-spacing:-.025em; }
+.dc-detail-section .text-cm-muted { color:#92958b; }
+
+/* Compact rating/watchlist control: no oversized teal slab. */
+.dc-movie-feedback {
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  flex-wrap:nowrap;
+  gap:12px;
+  width:fit-content;
+  max-width:100%;
+  height:54px;
+  min-height:54px;
+  max-height:54px;
+  margin-top:17px;
+  padding:7px 11px;
+  overflow:visible;
+  border:1px solid rgba(241,240,233,.14);
+  border-radius:9px;
+  background:rgba(10,11,10,.76);
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+}
+.dc-rating-control { display:flex; align-items:center; gap:9px; }
+.dc-rating-control>span {
+  color:#a7aa9e;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.13em;
+  white-space:nowrap;
+}
+.dc-rating-control>div { display:flex; align-items:center; gap:1px; }
+.dc-rating-control>div button { padding:2px; color:var(--dc-lime); }
+.dc-rating-control>div button:hover { color:#e0f7a9; transform:scale(1.08); }
+.dc-rating-remove { color:#a7aa9e; font-size:9px; }
+.dc-rating-remove:hover { color:var(--dc-lime); }
+.dc-watchlist-toggle {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+  padding:8px 10px;
+  border:1px solid rgba(200,241,105,.34);
+  border-radius:7px;
+  background:rgba(200,241,105,.08);
+  color:var(--dc-lime);
+  font-size:9px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.dc-watchlist-toggle:hover { background:rgba(200,241,105,.15); }
+.dc-watchlist-toggle.saved {
+  border-color:rgba(200,241,105,.55);
+  background:rgba(200,241,105,.15);
+  color:#d9f59b;
+}
+.dc-feedback-message {
+  position:absolute;
+  left:12px;
+  bottom:-19px;
+  display:block;
+  width:max-content;
+  max-width:min(440px,calc(100vw - 48px));
+  min-height:12px;
+  margin:0;
+  color:#c8f169;
+  font-size:9px;
+  line-height:12px;
+  pointer-events:none;
+}
+.dc-movie-feedback .dc-feedback-message { flex:none; }
+@media(max-width:640px) {
+  .dc-movie-feedback {
+    display:flex;
+    width:100%;
+    height:auto;
+    min-height:54px;
+    max-height:none;
+    flex-wrap:wrap;
+    gap:9px;
+    padding:10px;
+  }
+  .dc-rating-control { gap:7px; }
+  .dc-rating-control>span { font-size:7px; }
+  .dc-rating-control>div button svg { width:16px; height:16px; }
+  .dc-feedback-message { bottom:-17px; }
+  .dc-detail-hero > div.relative.z-10 { align-items:flex-end; gap:16px; }
+}
