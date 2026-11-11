@@ -212,7 +212,7 @@ def paired_bootstrap_difference_ci(left, right, metric, seed=42, samples=1000):
     return bootstrap_mean_ci(differences, seed=seed, samples=samples)
 
 
-def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstrap_seed=42):
+def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstrap_seed=42, include_ci=True):
     users = [u for u, items in relevant_by_user.items() if items]
     output = {}
     for k in ks:
@@ -224,23 +224,27 @@ def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstr
         means = np.asarray([
             [row["precision"], row["recall"], row["ndcg"]] for row in rows
         ], dtype=float).mean(axis=0) if rows else np.zeros(3)
-        output[str(k)] = {
+        metrics = {
             "precision": round(float(means[0]), 6),
             "recall": round(float(means[1]), 6),
             "ndcg": round(float(means[2]), 6),
-            "precision_ci95": bootstrap_mean_ci(
-                (row["precision"] for row in rows), seed=bootstrap_seed + k
-            ),
-            "recall_ci95": bootstrap_mean_ci(
-                (row["recall"] for row in rows), seed=bootstrap_seed + 100 + k
-            ),
-            "ndcg_ci95": bootstrap_mean_ci(
-                (row["ndcg"] for row in rows), seed=bootstrap_seed + 200 + k
-            ),
             "coverage": round(len(recommended_union) / len(candidate_catalog), 6)
             if candidate_catalog else 0.0,
             "users_evaluated": len(users),
         }
+        if include_ci:
+            metrics.update({
+                "precision_ci95": bootstrap_mean_ci(
+                    (row["precision"] for row in rows), seed=bootstrap_seed + k
+                ),
+                "recall_ci95": bootstrap_mean_ci(
+                    (row["recall"] for row in rows), seed=bootstrap_seed + 100 + k
+                ),
+                "ndcg_ci95": bootstrap_mean_ci(
+                    (row["ndcg"] for row in rows), seed=bootstrap_seed + 200 + k
+                ),
+            })
+        output[str(k)] = metrics
     return output
 
 def _normalize_rows(matrix):
@@ -433,7 +437,7 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed
         candidate = fuse_hybrid(
             signal_rankings, weights, max(ks) * 10, users=sampled_users
         )
-        metrics = evaluate_rankings(candidate, tuning_validation, candidate_catalog, [objective_k])
+        metrics = evaluate_rankings(candidate, tuning_validation, candidate_catalog, [objective_k], include_ci=False)
         score = metrics[str(objective_k)]["ndcg"]
         tested += 1
         # Deterministic tie-break: NDCG, precision, then prefer lower total weight.
