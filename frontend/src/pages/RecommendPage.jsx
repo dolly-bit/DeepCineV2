@@ -4,7 +4,6 @@ import { Search } from "lucide-react";
 
 import Navbar from "../components/layout/Navbar";
 import HomeSidebar from "../components/layout/HomeSidebar";
-import DashboardHero from "../components/home/DashboardHero";
 import RecommendationSection from "../components/RecommendationSection";
 import { getAuthState } from "../services/auth";
 
