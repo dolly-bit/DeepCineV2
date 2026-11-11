@@ -20,7 +20,6 @@ from app.core.config import settings
 from app.database.connection import SessionLocal
 from app.services.tmdb.movies import import_catalog_movies, TMDBAuthError
 from app.services.tmdb.genres import import_genres
-from app.services.tmdb.genres import import_genres
 from ai.index_builder import build_recommendation_index
 from ai.recommender import invalidate_index_cache
 from app.services.tmdb.client import TMDB_CACHE
@@ -48,8 +47,7 @@ def _check_token(x_admin_token: str | None):
 @router.post("/seed")
 async def seed_database(x_admin_token: str | None = Header(default=None)):
     """
-    Imports up to 10,000 TMDB discover results with genre links, then builds the recommendation index. Equivalent to running all four local scripts
-    in order, but over HTTP.
+    Imports up to 10,000 TMDB discover results with genre links, then builds the recommendation index.
 
     Usage (replace with your real values):
         curl -X POST https://your-api.onrender.com/admin/seed \\
@@ -64,7 +62,6 @@ async def seed_database(x_admin_token: str | None = Header(default=None)):
 
     try:
         try:
-            await import_genres(db)
             result.update(await import_catalog_movies(db, target_count=10_000))
         except TMDBAuthError as e:
             raise HTTPException(status_code=502, detail=str(e))
