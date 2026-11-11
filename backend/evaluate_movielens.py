@@ -1,20 +1,20 @@
 """
-MovieLens offline benchmark for the current DeepCine catalog.
+Leakage-aware MovieLens recommender benchmark for DeepCine.
 
 Run from backend/:
-    python evaluate_movielens.py --ratings-path ../datasets/movielens/ratings.csv \
-        --links-path ../datasets/movielens/links.csv --ks 5,10,20
+  python evaluate_movielens.py --ratings-path ../datasets/movielens/ratings.csv \
+      --links-path ../datasets/movielens/links.csv --ks 5,10,20
 
-This benchmark is deliberately separate from production watch_history.
-It maps MovieLens movieId -> TMDB ID, restricts candidates and ground truth
-to the catalog overlap, keeps each user's latest rating per movie, treats
-ratings >= the configured threshold as positive, and performs a per-user
-chronological holdout. ALS and all interaction-derived signals use train only.
+The benchmark is isolated from production watch_history. It uses a per-user
+chronological train/validation/test split. Model fitting and user profiles
+use train only; RRF weights are selected on validation only; final metrics
+are computed once on the held-out test partition.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import math
 from collections import Counter, defaultdict
@@ -25,16 +25,23 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
 from implicit.als import AlternatingLeastSquares
+from threadpoolctl import threadpool_limits
 
 from app.database.connection import SessionLocal
 from app.models import Movie, MovieGenre
 from ai.ranking import reciprocal_rank_fusion
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "evaluation" / "results"
+DEFAULT_WEIGHTS = {
+    "content": 1.0,
+    "collaborative": 1.0,
+    "genre": 0.65,
+    "popularity": 0.25,
+}
+WEIGHT_GRID = (0.25, 0.5, 1.0, 2.0)
 
 
 def load_movie_mapping(links_path: str | Path, catalog_tmdb_ids: set[int]):
-    """Return MovieLens movieId -> catalog TMDB ID for valid overlap only."""
     links = pd.read_csv(links_path, usecols=["movieId", "tmdbId"])
     links["movieId"] = pd.to_numeric(links["movieId"], errors="coerce")
     links["tmdbId"] = pd.to_numeric(links["tmdbId"], errors="coerce")
@@ -42,25 +49,14 @@ def load_movie_mapping(links_path: str | Path, catalog_tmdb_ids: set[int]):
     links["movieId"] = links["movieId"].astype("int64")
     links["tmdbId"] = links["tmdbId"].astype("int64")
     links = links[links["tmdbId"].isin(catalog_tmdb_ids)]
-    # A MovieLens movieId should map to one TMDB ID. Keep first defensively.
     links = links.drop_duplicates(subset=["movieId"], keep="first")
     return dict(zip(links["movieId"], links["tmdbId"]))
 
 
-def load_latest_ratings(
-    ratings_path: str | Path,
-    movie_mapping: dict[int, int],
-    chunksize: int = 500_000,
-):
-    """
-    Stream ratings and retain the latest rating for each user/TMDB pair.
-
-    Latest rating is selected before applying the positive threshold so an
-    older 5-star rating cannot override a later negative rating.
-    """
+def load_latest_ratings(ratings_path, movie_mapping, chunksize=500_000):
+    """Stream ratings; latest timestamp wins before positive filtering."""
     latest = {}
-    total_rows = 0
-    matched_rows = 0
+    total_rows = matched_rows = 0
     for chunk in pd.read_csv(
         ratings_path,
         usecols=["userId", "movieId", "rating", "timestamp"],
@@ -91,8 +87,20 @@ def load_latest_ratings(
     }
 
 
-def build_temporal_split(latest_ratings, positive_threshold=4.0, test_ratio=0.2):
-    """Create positive-only per-user chronological train/test item sets."""
+def build_temporal_split(
+    latest_ratings, positive_threshold=4.0,
+    train_ratio=0.6, validation_ratio=0.2, test_ratio=0.2,
+):
+    """
+    Per-user chronological 3-way split.
+
+    Users need >=3 positive catalog interactions so every partition has at
+    least one item. Rounding is deterministic and leaves at least one item
+    in each partition.
+    """
+    ratios = (train_ratio, validation_ratio, test_ratio)
+    if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
+        raise ValueError("train/validation/test ratios must be positive and sum to 1")
     by_user = defaultdict(list)
     positive_pairs = 0
     for (user_id, tmdb_id), (timestamp, rating) in latest_ratings.items():
@@ -100,20 +108,34 @@ def build_temporal_split(latest_ratings, positive_threshold=4.0, test_ratio=0.2)
             by_user[user_id].append((timestamp, tmdb_id))
             positive_pairs += 1
 
-    train, test = {}, {}
+    train, validation, test = {}, {}, {}
+    excluded_users = 0
     for user_id, events in by_user.items():
         events.sort(key=lambda item: (item[0], item[1]))
-        # One interaction per movie is already guaranteed by latest_ratings.
-        if len(events) < 2:
+        n = len(events)
+        if n < 3:
+            excluded_users += 1
             continue
-        n_test = max(1, int(math.ceil(len(events) * test_ratio)))
-        n_test = min(n_test, len(events) - 1)
-        train[user_id] = {item for _, item in events[:-n_test]}
-        test[user_id] = {item for _, item in events[-n_test:]}
-    return train, test, {
-        "users_with_at_least_two_positive_movies": len(train),
+        n_test = max(1, int(math.floor(n * test_ratio)))
+        n_validation = max(1, int(math.floor(n * validation_ratio)))
+        while n_test + n_validation >= n:
+            if n_test > 1:
+                n_test -= 1
+            else:
+                n_validation -= 1
+        n_train = n - n_validation - n_test
+        train[user_id] = {item for _, item in events[:n_train]}
+        validation[user_id] = {
+            item for _, item in events[n_train:n_train + n_validation]
+        }
+        test[user_id] = {item for _, item in events[n_train + n_validation:]}
+
+    return train, validation, test, {
         "positive_user_movie_pairs": positive_pairs,
+        "eligible_users": len(train),
+        "excluded_users_fewer_than_three_positive_items": excluded_users,
         "train_interactions": sum(map(len, train.values())),
+        "validation_interactions": sum(map(len, validation.values())),
         "test_interactions": sum(map(len, test.values())),
     }
 
@@ -141,23 +163,21 @@ def ndcg_at_k(recommended, relevant, k):
     return dcg / idcg if idcg else 0.0
 
 
-def evaluate_rankings(rankings, test, candidate_catalog, ks):
-    """Macro-average user metrics; coverage denominator is overlap catalog."""
-    users = [user for user, relevant in test.items() if relevant]
+def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks):
+    users = [u for u, items in relevant_by_user.items() if items]
     output = {}
     for k in ks:
-        metric_rows = []
-        recommended_union = set()
+        rows, recommended_union = [], set()
         for user in users:
             recs = rankings.get(user, [])[:k]
-            relevant = test[user]
-            metric_rows.append((
+            relevant = relevant_by_user[user]
+            rows.append((
                 precision_at_k(recs, relevant, k),
                 recall_at_k(recs, relevant, k),
                 ndcg_at_k(recs, relevant, k),
             ))
             recommended_union.update(recs)
-        means = np.asarray(metric_rows, dtype=float).mean(axis=0) if metric_rows else np.zeros(3)
+        means = np.asarray(rows, dtype=float).mean(axis=0) if rows else np.zeros(3)
         output[str(k)] = {
             "precision": round(float(means[0]), 6),
             "recall": round(float(means[1]), 6),
@@ -174,24 +194,22 @@ def _normalize_rows(matrix):
     return matrix / np.maximum(norms, 1e-12)
 
 
-def build_model_rankings(db, train, catalog_movies, ks_max, als_factors=64):
-    """Build four recommenders using only the temporal training interactions."""
-    catalog_ids = {movie.tmdb_id for movie in catalog_movies}
-    movies = {movie.tmdb_id: movie for movie in catalog_movies}
-    train = {
-        user: items & catalog_ids for user, items in train.items()
-    }
-    train = {user: items for user, items in train.items() if items}
+def build_signal_rankings(
+    db, train, catalog_movies, ks_max, als_factors=64, seed=42,
+):
+    """Create signal rankings from train only, plus two popularity baselines."""
+    catalog_ids = {int(movie.tmdb_id) for movie in catalog_movies}
+    movies = {int(movie.tmdb_id): movie for movie in catalog_movies}
+    train = {u: (items & catalog_ids) for u, items in train.items()}
+    train = {u: items for u, items in train.items() if items}
 
-    # MovieLens popularity baseline: positive training interaction count.
     item_counts = Counter(item for items in train.values() for item in items)
-    popularity_order = sorted(
+    global_popularity_order = sorted(
         catalog_ids,
         key=lambda item: (item_counts[item], float(movies[item].popularity or 0), item),
         reverse=True,
     )
 
-    # Metadata embeddings are item features; user profiles use train items only.
     from sentence_transformers import SentenceTransformer
     encoder = SentenceTransformer("all-MiniLM-L6-v2")
     ordered_ids = sorted(catalog_ids)
@@ -204,10 +222,8 @@ def build_model_rankings(db, train, catalog_movies, ks_max, als_factors=64):
         texts, batch_size=64, show_progress_bar=True
     ).astype("float32")
     embeddings = _normalize_rows(embeddings)
-    item_pos = {item: index for index, item in enumerate(ordered_ids)}
+    item_pos = {item: idx for idx, item in enumerate(ordered_ids)}
 
-    # ALS fit on training interactions only. Unseen candidates are not scored
-    # by ALS, so hybrid/content/popularity provide cold-start coverage.
     users = sorted(train)
     als_items = sorted(set().union(*train.values())) if users else []
     user_pos = {user: idx for idx, user in enumerate(users)}
@@ -221,87 +237,141 @@ def build_model_rankings(db, train, catalog_movies, ks_max, als_factors=64):
         (np.ones(len(rows), dtype=np.float32), (rows, cols)),
         shape=(len(users), len(als_items)),
     )
+
     als = None
     if len(users) >= 2 and len(als_items) >= 2 and matrix.nnz:
         als = AlternatingLeastSquares(
-            factors=als_factors, regularization=0.05,
-            iterations=20, random_state=42, num_threads=1,
+            factors=als_factors, regularization=0.05, iterations=20,
+            random_state=seed, num_threads=1,
         )
-        als.fit(matrix)
+        # Prevent nested BLAS/OpenMP pools from oversubscribing CPU threads.
+        with threadpool_limits(limits=1):
+            als.fit(matrix)
 
     genre_rows = db.query(Movie.tmdb_id, MovieGenre.genre_id).join(
         MovieGenre, MovieGenre.movie_id == Movie.id
     ).filter(Movie.tmdb_id.in_(catalog_ids)).all()
     genres_by_item = defaultdict(set)
     for tmdb_id, genre_id in genre_rows:
-        genres_by_item[tmdb_id].add(genre_id)
+        genres_by_item[int(tmdb_id)].add(genre_id)
 
-    names = ("popularity", "content", "collaborative", "hybrid")
-    rankings = {name: {} for name in names}
+    signal_names = (
+        "global_popularity", "personalized_popularity", "content",
+        "collaborative", "genre",
+    )
+    signals = {name: {} for name in signal_names}
     candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
 
     for user, watched in train.items():
         unseen = catalog_ids - watched
-        pop = [item for item in popularity_order if item in unseen][:candidate_limit]
+        global_pop = [i for i in global_popularity_order if i in unseen][:candidate_limit]
+
+        # Personalized popularity: training interaction popularity, boosted
+        # by overlap with this user's training-derived genre profile.
+        genre_counts = Counter()
+        for item in watched:
+            genre_counts.update(genres_by_item.get(item, set()))
+        preferred = set(genre_counts)
+        def personalized_score(item):
+            item_genres = genres_by_item.get(item, set())
+            affinity = sum(genre_counts[g] for g in item_genres)
+            return (affinity, item_counts[item], float(movies[item].popularity or 0), item)
+        personalized_pop = sorted(
+            unseen, key=personalized_score, reverse=True
+        )[:candidate_limit]
 
         positions = [item_pos[item] for item in watched]
-        profile = _normalize_rows(embeddings[positions].mean(axis=0, keepdims=True))[0]
-        scores = embeddings @ profile
+        profile = _normalize_rows(
+            embeddings[positions].mean(axis=0, keepdims=True)
+        )[0]
+        content_scores = embeddings @ profile
         content = sorted(
-            unseen, key=lambda item: float(scores[item_pos[item]]), reverse=True
+            unseen,
+            key=lambda item: (float(content_scores[item_pos[item]]), item),
+            reverse=True,
         )[:candidate_limit]
 
         collaborative = []
         if als is not None and user in user_pos:
-            user_vector = als.user_factors[user_pos[user]]
-            item_scores = als.item_factors @ user_vector
-            collaborative = [
-                item for item, _ in sorted(
-                    ((item, float(item_scores[als_item_pos[item]]))
-                     for item in als_items if item not in watched),
-                    key=lambda pair: pair[1], reverse=True,
-                )[:candidate_limit]
-            ]
+            with threadpool_limits(limits=1):
+                user_vector = als.user_factors[user_pos[user]]
+                item_scores = als.item_factors @ user_vector
+            collaborative = sorted(
+                (item for item in als_items if item not in watched),
+                key=lambda item: (float(item_scores[als_item_pos[item]]), item),
+                reverse=True,
+            )[:candidate_limit]
 
-        genre_counts = Counter()
-        for item in watched:
-            genre_counts.update(genres_by_item.get(item, set()))
-        preferred_genres = set(genre_counts)
         genre_ranked = [
             item for item in unseen
-            if genres_by_item.get(item, set()) & preferred_genres
+            if genres_by_item.get(item, set()) & preferred
         ]
         genre_ranked.sort(
             key=lambda item: (
                 sum(genre_counts[g] for g in genres_by_item[item]),
                 item_counts[item],
+                item,
             ),
             reverse=True,
         )
-        genre_ranked = genre_ranked[:candidate_limit]
+        signals["global_popularity"][user] = global_pop
+        signals["personalized_popularity"][user] = personalized_pop
+        signals["content"][user] = content
+        signals["collaborative"][user] = collaborative
+        signals["genre"][user] = genre_ranked[:candidate_limit]
+    return signals
 
-        rankings["popularity"][user] = pop
-        rankings["content"][user] = content
-        rankings["collaborative"][user] = collaborative
-        rankings["hybrid"][user] = reciprocal_rank_fusion(
+
+def fuse_hybrid(signal_rankings, weights, top_k):
+    hybrid = {}
+    for user, signals in signal_rankings["content"].items():
+        hybrid[user] = reciprocal_rank_fusion(
             {
-                "content": content,
-                "collaborative": collaborative,
-                "genre": genre_ranked,
-                "popularity": pop,
+                "content": signals,
+                "collaborative": signal_rankings["collaborative"].get(user, []),
+                "genre": signal_rankings["genre"].get(user, []),
+                "popularity": signal_rankings["global_popularity"].get(user, []),
             },
-            weights={"content": 1.0, "collaborative": 1.0,
-                     "genre": 0.65, "popularity": 0.25},
-            top_k=candidate_limit,
+            weights=weights,
+            top_k=top_k,
         )
-    return rankings
+    return hybrid
+
+
+def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog):
+    """Select RRF weights on validation NDCG@10 (or largest available K)."""
+    objective_k = 10 if 10 in ks else max(ks)
+    best = None
+    tested = 0
+    for values in itertools.product(WEIGHT_GRID, repeat=4):
+        weights = dict(zip(
+            ("content", "collaborative", "genre", "popularity"), values
+        ))
+        candidate = fuse_hybrid(signal_rankings, weights, max(ks) * 10)
+        metrics = evaluate_rankings(candidate, validation, candidate_catalog, [objective_k])
+        score = metrics[str(objective_k)]["ndcg"]
+        tested += 1
+        # Deterministic tie-break: NDCG, precision, then prefer lower total weight.
+        precision = metrics[str(objective_k)]["precision"]
+        key = (score, precision, -sum(values))
+        if best is None or key > best["key"]:
+            best = {"key": key, "weights": weights, "metrics": metrics}
+    return {
+        "objective": f"validation_ndcg_at_{objective_k}",
+        "objective_score": best["key"][0],
+        "validation_precision_at_objective_k": best["key"][1],
+        "weights": best["weights"],
+        "weight_grid": list(WEIGHT_GRID),
+        "configurations_tested": tested,
+        "validation_metrics_at_objective_k": best["metrics"],
+    }
 
 
 def run(args):
     db = SessionLocal()
     try:
         catalog_movies = db.query(Movie).filter(Movie.tmdb_id.isnot(None)).all()
-        catalog_by_id = {int(movie.tmdb_id): movie for movie in catalog_movies}
+        catalog_by_id = {int(m.tmdb_id): m for m in catalog_movies}
         catalog_ids = set(catalog_by_id)
         if not catalog_ids:
             raise RuntimeError("DeepCine catalog is empty; import movies first.")
@@ -313,29 +383,58 @@ def run(args):
         latest, scan_stats = load_latest_ratings(
             args.ratings_path, mapping, chunksize=args.chunksize
         )
-        train, test, split_stats = build_temporal_split(
-            latest, args.positive_threshold, args.test_ratio
+        train, validation, test, split_stats = build_temporal_split(
+            latest, positive_threshold=args.positive_threshold,
+            train_ratio=args.train_ratio,
+            validation_ratio=args.validation_ratio,
+            test_ratio=args.test_ratio,
         )
         overlap_ids = set(mapping.values())
-        train = {u: items & overlap_ids for u, items in train.items()}
-        test = {u: items & overlap_ids for u, items in test.items()}
         eligible = {
-            u for u in train.keys() & test.keys()
-            if train[u] and test[u]
+            user for user in train.keys() & validation.keys() & test.keys()
+            if train[user] & overlap_ids
+            and validation[user] & overlap_ids
+            and test[user] & overlap_ids
         }
-        train = {u: train[u] for u in eligible}
-        test = {u: test[u] for u in eligible}
+        train = {u: train[u] & overlap_ids for u in eligible}
+        validation = {u: validation[u] & overlap_ids for u in eligible}
+        test = {u: test[u] & overlap_ids for u in eligible}
         if not eligible:
             raise RuntimeError(
-                "No eligible users remain after catalog-overlap filtering. "
-                "Lower the positive threshold or expand the catalog."
+                "No eligible users after overlap filtering. Expand the catalog "
+                "or check the positive threshold and MovieLens mapping."
             )
 
         overlap_movies = [catalog_by_id[item] for item in sorted(overlap_ids)]
-        rankings = build_model_rankings(db, train, overlap_movies, max(args.ks))
-        metrics = {
-            name: evaluate_rankings(model_rankings, test, overlap_ids, args.ks)
-            for name, model_rankings in rankings.items()
+        signals = build_signal_rankings(
+            db, train, overlap_movies, max(args.ks),
+            als_factors=args.als_factors, seed=args.seed,
+        )
+
+        # Validation-only weight selection. Test labels are not passed here.
+        tuning = tune_hybrid_weights(signals, validation, args.ks, overlap_ids)
+        hybrid = fuse_hybrid(signals, tuning["weights"], max(args.ks) * 10)
+
+        final_rankings = {
+            "global_popularity": signals["global_popularity"],
+            "personalized_popularity": signals["personalized_popularity"],
+            "content": signals["content"],
+            "collaborative": signals["collaborative"],
+            "hybrid_tuned": hybrid,
+            "hybrid_previous_weights": fuse_hybrid(
+                signals, DEFAULT_WEIGHTS, max(args.ks) * 10
+            ),
+        }
+        validation_rankings = {
+            name: rankings for name, rankings in final_rankings.items()
+        }
+        validation_metrics = {
+            name: evaluate_rankings(rankings, validation, overlap_ids, args.ks)
+            for name, rankings in validation_rankings.items()
+        }
+        test_metrics = {
+            name: evaluate_rankings(rankings, test, overlap_ids, args.ks)
+            for name, rankings in final_rankings.items()
         }
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -356,45 +455,65 @@ def run(args):
             },
             "scan": scan_stats,
             "split": {
-                "method": "per-user chronological holdout after latest-rating deduplication",
+                "method": "per-user chronological 3-way split after latest-rating deduplication",
+                "train_ratio": args.train_ratio,
+                "validation_ratio": args.validation_ratio,
                 "test_ratio": args.test_ratio,
                 **split_stats,
-                "eligible_users": len(eligible),
+                "eligible_users_all_three_partitions": len(eligible),
                 "eligible_train_interactions": sum(map(len, train.values())),
+                "eligible_validation_interactions": sum(map(len, validation.values())),
                 "eligible_test_interactions": sum(map(len, test.values())),
             },
+            "reproducibility": {
+                "seed": args.seed,
+                "als_factors": args.als_factors,
+                "als_iterations": 20,
+                "als_regularization": 0.05,
+                "blas_thread_limit": 1,
+            },
+            "hybrid_tuning": tuning,
             "evaluation": {
                 "metrics": ["precision", "recall", "ndcg", "coverage"],
                 "ks": args.ks,
                 "averaging": "macro average over eligible users",
                 "coverage_denominator": "MovieLens/DeepCine overlapping catalog",
-                "als_training_data": "positive training interactions only",
-                "user_profiles": "positive training interactions only",
+                "model_fit_data": "training partition only",
+                "weight_selection_data": "validation partition only",
+                "final_reporting_data": "held-out test partition only",
+                "objective": tuning["objective"],
             },
-            "models": metrics,
+            "validation_metrics": validation_metrics,
+            "test_metrics": test_metrics,
             "limitations": [
-                "Only 197 overlapping movies were present in the observed catalog; "
-                "results do not represent the full DeepCine catalog.",
-                "Ratings >= threshold are treated as implicit positives; this is "
-                "not explicit rating prediction.",
-                "MovieLens users and interactions are external benchmark data, not "
-                "production DeepCine users or watch history.",
-                "The RRF weights are fixed configuration values and have not been tuned.",
+                "Results apply only to the MovieLens/DeepCine overlapping catalog, not the full DeepCine catalog.",
+                "Ratings >= threshold are implicit positives; this is not explicit rating prediction.",
+                "MovieLens users and interactions are external benchmark data, not production DeepCine users or watch history.",
+                "Per-user chronological splitting is not a global calendar-time split.",
+                "Personalized popularity uses training-only genre affinity and item interaction counts.",
+                "The final test partition must not be used to select weights or model settings.",
             ],
         }
 
-        json_path = OUTPUT_DIR / f"movielens_metrics_{timestamp}.json"
+        json_path = OUTPUT_DIR / f"movielens_phase2_{timestamp}.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        csv_path = OUTPUT_DIR / f"movielens_metrics_{timestamp}.csv"
+        csv_path = OUTPUT_DIR / f"movielens_phase2_{timestamp}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["model", "k", "precision", "recall", "ndcg",
-                             "coverage", "users_evaluated"])
-            for model, by_k in metrics.items():
-                for k, values in by_k.items():
-                    writer.writerow([model, k, values["precision"], values["recall"],
-                                     values["ndcg"], values["coverage"],
-                                     values["users_evaluated"]])
+            writer.writerow([
+                "partition", "model", "k", "precision", "recall",
+                "ndcg", "coverage", "users_evaluated",
+            ])
+            for partition, all_models in (
+                ("validation", validation_metrics), ("test", test_metrics)
+            ):
+                for model, by_k in all_models.items():
+                    for k, values in by_k.items():
+                        writer.writerow([
+                            partition, model, k, values["precision"],
+                            values["recall"], values["ndcg"],
+                            values["coverage"], values["users_evaluated"],
+                        ])
         print(json.dumps(payload, indent=2))
         print(f"\nSaved JSON: {json_path}")
         print(f"Saved CSV:  {csv_path}")
@@ -407,18 +526,23 @@ def parse_args():
     parser.add_argument("--ratings-path", default="../datasets/movielens/ratings.csv")
     parser.add_argument("--links-path", default="../datasets/movielens/links.csv")
     parser.add_argument("--positive-threshold", type=float, default=4.0)
+    parser.add_argument("--train-ratio", type=float, default=0.6)
+    parser.add_argument("--validation-ratio", type=float, default=0.2)
     parser.add_argument("--test-ratio", type=float, default=0.2)
     parser.add_argument("--chunksize", type=int, default=500_000)
     parser.add_argument("--ks", default="5,10,20")
+    parser.add_argument("--als-factors", type=int, default=64)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    if not 0.05 <= args.test_ratio <= 0.5:
-        parser.error("--test-ratio must be between 0.05 and 0.5")
-    if args.chunksize <= 0:
-        parser.error("--chunksize must be positive")
+    ratios = (args.train_ratio, args.validation_ratio, args.test_ratio)
+    if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
+        parser.error("train/validation/test ratios must be positive and sum to 1")
+    if args.chunksize <= 0 or args.als_factors <= 0:
+        parser.error("chunksize and ALS factors must be positive")
     args.ks = tuple(sorted({int(value) for value in args.ks.split(",")}))
     if not args.ks or any(k <= 0 for k in args.ks):
         parser.error("--ks must contain positive integers")
-    if args.positive_threshold < 0 or args.positive_threshold > 5:
+    if not 0 <= args.positive_threshold <= 5:
         parser.error("--positive-threshold must be between 0 and 5")
     return args
 
