@@ -29,7 +29,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-[#08070C] text-white">
 
-      <Navbar />
+      <Navbar publicMode hideSearch />
 
       <Hero movies={movies} loading={loading} />
 
