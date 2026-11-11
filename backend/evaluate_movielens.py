@@ -323,9 +323,13 @@ def build_signal_rankings(
     return signals
 
 
-def fuse_hybrid(signal_rankings, weights, top_k):
+def fuse_hybrid(signal_rankings, weights, top_k, users=None):
     hybrid = {}
-    for user, signals in signal_rankings["content"].items():
+    selected_users = (
+        users if users is not None else signal_rankings["content"].keys()
+    )
+    for user in selected_users:
+        signals = signal_rankings["content"].get(user, [])
         hybrid[user] = reciprocal_rank_fusion(
             {
                 "content": signals,
@@ -360,7 +364,9 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed
         weights = dict(zip(
             ("content", "collaborative", "genre", "popularity"), values
         ))
-        candidate = fuse_hybrid(signal_rankings, weights, max(ks) * 10)
+        candidate = fuse_hybrid(
+            signal_rankings, weights, max(ks) * 10, users=sampled_users
+        )
         metrics = evaluate_rankings(candidate, tuning_validation, candidate_catalog, [objective_k])
         score = metrics[str(objective_k)]["ndcg"]
         tested += 1
