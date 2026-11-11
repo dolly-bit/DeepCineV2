@@ -206,7 +206,7 @@ export default function MovieDetails() {
                 catch (err) { console.error(err); setFeedbackMessage("Could not update your watchlist. Sign in and ensure this movie is in the catalogue."); }
                 finally { setFeedbackLoading(false); }
               }}>{watchlisted ? <Check size={15}/> : <Bookmark size={15}/>} {watchlisted ? "In My List" : "Add to My List"}</button>
-              {feedbackMessage && <span className="dc-feedback-message" role="status">{feedbackMessage}</span>}
+              <span className="dc-feedback-message" role="status" aria-live="polite">{feedbackMessage || "\u00a0"}</span>
             </div>
             <div className="mt-6 flex gap-3">
               {trailer && (
