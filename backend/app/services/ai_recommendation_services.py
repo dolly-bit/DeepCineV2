@@ -1,30 +1,120 @@
+from collections import defaultdict
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import WatchHistory, Movie, MovieGenre
+from app.models import WatchHistory, Movie, MovieGenre, Rating, WatchlistItem
 from ai import collaborative
 from ai.recommender import recommend_for_user_content
 from ai.ranking import reciprocal_rank_fusion
 
 
-def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20):
-    """Fuse content, ALS, genre-affinity and popularity candidate rankings.
+def _rank_by_genre_affinity(db: Session, genre_weights, excluded_movie_ids, top_k=100):
+    """Rank unseen catalog movies using positive and negative genre feedback."""
+    if not genre_weights:
+        return []
 
-    Reciprocal-rank fusion is used because FAISS distances, ALS dot products
-    and TMDB popularity are not calibrated to a shared numeric scale.
+    rows = (
+        db.query(
+            Movie.tmdb_id,
+            Movie.id,
+            Movie.popularity,
+            Movie.vote_average,
+            MovieGenre.genre_id,
+        )
+        .join(MovieGenre, MovieGenre.movie_id == Movie.id)
+        .filter(~Movie.id.in_(excluded_movie_ids) if excluded_movie_ids else True)
+        .all()
+    )
+
+    scores = defaultdict(float)
+    popularity = {}
+    for tmdb_id, movie_id, movie_popularity, vote_average, genre_id in rows:
+        scores[tmdb_id] += genre_weights.get(genre_id, 0.0)
+        popularity[tmdb_id] = (
+            max(float(movie_popularity or 0), 0.0),
+            float(vote_average or 0),
+        )
+
+    ranked = [
+        tmdb_id for tmdb_id, score in scores.items()
+        if score > 0
+    ]
+    ranked.sort(
+        key=lambda tmdb_id: (
+            scores[tmdb_id],
+            popularity[tmdb_id][0],
+            popularity[tmdb_id][1],
+        ),
+        reverse=True,
+    )
+    return ranked[:top_k]
+
+
+def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20):
+    """Fuse behavioral, rating, watchlist, collaborative and popularity signals.
+
+    Explicit 4-5 star ratings and watchlist saves strengthen genre preferences.
+    1-2 star ratings weaken those genres and suppress the rated title. Neutral
+    3-star ratings are excluded from preference learning.
     """
     history = db.query(WatchHistory).filter(
         WatchHistory.user_id == user_id
     ).order_by(WatchHistory.watched_at.desc()).all()
-    watched_tmdb_ids = {event.tmdb_id for event in history}
-    watched_db_ids = set()
+    ratings = db.query(Rating).filter(Rating.user_id == user_id).all()
+    watchlist_items = db.query(WatchlistItem).filter(
+        WatchlistItem.user_id == user_id
+    ).all()
 
-    if watched_tmdb_ids:
-        watched_db_ids = {
+    interacted_movie_ids = {event.tmdb_id for event in history}
+    rated_movie_ids = {rating.movie_id for rating in ratings}
+    watchlist_movie_ids = {item.movie_id for item in watchlist_items}
+    excluded_db_ids = set(rated_movie_ids) | set(watchlist_movie_ids)
+
+    if interacted_movie_ids:
+        history_movie_ids = {
             movie.id for movie in db.query(Movie).filter(
-                Movie.tmdb_id.in_(watched_tmdb_ids)
+                Movie.tmdb_id.in_(interacted_movie_ids)
             ).all()
         }
+        excluded_db_ids.update(history_movie_ids)
+
+    # Genre affinity combines implicit watches with explicit user feedback.
+    genre_weights = defaultdict(float)
+
+    if interacted_movie_ids:
+        watched_genres = (
+            db.query(MovieGenre.genre_id)
+            .join(Movie, Movie.id == MovieGenre.movie_id)
+            .filter(Movie.tmdb_id.in_(interacted_movie_ids))
+            .all()
+        )
+        for (genre_id,) in watched_genres:
+            genre_weights[genre_id] += 1.0
+
+    for rating in ratings:
+        # A 1-star rating is a stronger negative signal than a 2-star rating.
+        weight = float(rating.value - 3)
+        if weight == 0:
+            continue
+        movie_genres = db.query(MovieGenre.genre_id).filter(
+            MovieGenre.movie_id == rating.movie_id
+        ).all()
+        for (genre_id,) in movie_genres:
+            genre_weights[genre_id] += weight * 1.5
+
+    for item in watchlist_items:
+        movie_genres = db.query(MovieGenre.genre_id).filter(
+            MovieGenre.movie_id == item.movie_id
+        ).all()
+        for (genre_id,) in movie_genres:
+            genre_weights[genre_id] += 1.5
+
+    # Disliked titles are never recommended back to the user.
+    disliked_movie_ids = {
+        rating.movie_id for rating in ratings if rating.value <= 2
+    }
+    excluded_db_ids.update(disliked_movie_ids)
 
     content = recommend_for_user_content(user_id, db, top_k=100)
     collaborative_ranking = [
@@ -32,37 +122,14 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
         in collaborative.recommendation_scores_for_user(user_id, top_k=100)
     ]
 
-    genre_ranking = []
-    if watched_db_ids:
-        rows = db.query(MovieGenre.genre_id).filter(
-            MovieGenre.movie_id.in_(watched_db_ids)
-        ).all()
-        counts = {}
-        for (genre_id,) in rows:
-            counts[genre_id] = counts.get(genre_id, 0) + 1
-        favorite_genres = sorted(
-            counts, key=counts.get, reverse=True
-        )[:5]
-        if favorite_genres:
-            genre_rows = (
-                db.query(Movie.tmdb_id)
-                .join(MovieGenre, MovieGenre.movie_id == Movie.id)
-                .filter(
-                    MovieGenre.genre_id.in_(favorite_genres),
-                    ~Movie.id.in_(watched_db_ids),
-                )
-                .group_by(Movie.id, Movie.tmdb_id, Movie.popularity)
-                .order_by(
-                    func.count(MovieGenre.genre_id).desc(),
-                    func.coalesce(Movie.popularity, 0).desc(),
-                )
-                .limit(100).all()
-            )
-            genre_ranking = [tmdb_id for (tmdb_id,) in genre_rows]
+    preference_ranking = _rank_by_genre_affinity(
+        db, genre_weights, excluded_db_ids, top_k=100
+    )
 
+    # Popularity is a fallback signal, not the dominant personalization input.
     popular_query = db.query(Movie)
-    if watched_db_ids:
-        popular_query = popular_query.filter(~Movie.id.in_(watched_db_ids))
+    if excluded_db_ids:
+        popular_query = popular_query.filter(~Movie.id.in_(excluded_db_ids))
     popular = popular_query.order_by(
         func.coalesce(Movie.popularity, 0).desc(),
         func.coalesce(Movie.vote_average, 0).desc(),
@@ -73,17 +140,28 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
         {
             "content": content,
             "collaborative": collaborative_ranking,
-            "genre": genre_ranking,
+            "explicit_preferences": preference_ranking,
             "popularity": popularity_ranking,
         },
         weights={
             "content": 1.0,
             "collaborative": 1.0,
-            "genre": 0.65,
-            "popularity": 0.25,
+            "explicit_preferences": 1.25,
+            "popularity": 0.2,
         },
         top_k=top_k,
     )
+    if not fused_ids:
+        return []
+
+    # Final safety filter: never return titles already watched, rated or saved.
+    excluded_tmdb_ids = set(interacted_movie_ids)
+    excluded_tmdb_ids.update(
+        movie.tmdb_id for movie in db.query(Movie).filter(
+            Movie.id.in_(excluded_db_ids)
+        ).all()
+    )
+    fused_ids = [mid for mid in fused_ids if mid not in excluded_tmdb_ids]
     if not fused_ids:
         return []
 
