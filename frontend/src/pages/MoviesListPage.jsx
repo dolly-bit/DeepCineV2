@@ -1,12 +1,12 @@
 import { useEffect,useState } from "react";
-import { useLocation,useNavigate } from "react-router-dom";
-import { ChevronLeft,LoaderCircle } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { LoaderCircle } from "lucide-react";
 import Navbar from "../components/layout/Navbar";
 import HomeSidebar from "../components/layout/HomeSidebar";
 import MovieCard from "../components/home/MovieCard";
 import { discoverMovies,getPersonalizedRecommendations,getCollaborativeRecommendations,getUpcomingMovies } from "../services/movies";
 export default function MoviesListPage(){
-  const location=useLocation(),navigate=useNavigate();
+  const location=useLocation();
   const [mode,setMode]=useState(location.state?.mode||"recent");
   const title="Movie Collections";
   const [movies,setMovies]=useState([]),[page,setPage]=useState(0),[loading,setLoading]=useState(true),[loadingMore,setLoadingMore]=useState(false),[hasMore,setHasMore]=useState(true),[error,setError]=useState("");
@@ -38,7 +38,7 @@ export default function MoviesListPage(){
           results=results.filter(m=>m.release_date&&m.release_date>=today)
             .sort((a,b)=>a.release_date.localeCompare(b.release_date));
         }
-        setMovies(results);setPage(5);setHasMore(unique.size>=100);
+        setMovies(results);setPage(5);setHasMore(mode==="top-rated"?batches.every(batch=>batch.length>0):unique.size>=100);
       }catch(e){console.error(e);if(!cancelled)setError("Unable to load this movie collection.");}
       finally{if(!cancelled)setLoading(false);}
     }
@@ -61,13 +61,12 @@ export default function MoviesListPage(){
     finally{setLoadingMore(false);}
   }
   return <div className="dc-app-shell"><HomeSidebar/><main className="dc-app-main"><Navbar/><section className="dc-catalog-page">
-    <button className="dc-catalog-back" onClick={()=>navigate("/home")}><ChevronLeft size={16}/> Back to home</button>
     <div className="dc-catalog-heading"><div><span className="dc-slider-eyebrow">THE DEEPCINE LIBRARY</span><h1>Movie Collections</h1><p>Browse trending, recently released, top-rated and upcoming films.</p></div><span className="dc-catalog-count">{movies.length.toLocaleString()} FILMS LOADED</span></div>
     <div className="dc-movie-collection-tabs" role="tablist" aria-label="Movie collections">
-      <button type="button" role="tab" aria-selected={mode==="trending"} className={mode==="trending"?"active":""} onClick={()=>setMode("trending")}>Top Trending</button>
-      <button type="button" role="tab" aria-selected={mode==="recent"} className={mode==="recent"?"active":""} onClick={()=>setMode("recent")}>Recently Added</button>
-      <button type="button" role="tab" aria-selected={mode==="top-rated"} className={mode==="top-rated"?"active":""} onClick={()=>setMode("top-rated")}>Top Rated</button>
-      <button type="button" role="tab" aria-selected={mode==="upcoming"} className={mode==="upcoming"?"active":""} onClick={()=>setMode("upcoming")}>Upcoming</button>
+      <button type="button" role="tab" aria-selected={mode==="trending"} className={mode==="trending"?"active":""} onClick={()=>setMode("trending")}>1. Top Trending</button>
+      <button type="button" role="tab" aria-selected={mode==="top-rated"} className={mode==="top-rated"?"active":""} onClick={()=>setMode("top-rated")}>2. Top Rated</button>
+      <button type="button" role="tab" aria-selected={mode==="upcoming"} className={mode==="upcoming"?"active":""} onClick={()=>setMode("upcoming")}>3. Upcoming</button>
+      <button type="button" role="tab" aria-selected={mode==="recent"} className={mode==="recent"?"active":""} onClick={()=>setMode("recent")}>4. Recently Added</button>
     </div>
     {loading?<div className="dc-catalog-grid">{Array.from({length:20}).map((_,i)=><div className="dc-catalog-skeleton" key={i}/>)}</div>:error&&!movies.length?<p className="dc-catalog-message">{error}</p>:!movies.length?<p className="dc-catalog-message">No movies are available for this collection.</p>:<>
       <div className="dc-catalog-grid">{movies.map(movie=><MovieCard key={movie.id} movie={movie}/>)}</div>
