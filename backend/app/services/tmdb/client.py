@@ -112,7 +112,7 @@ TMDB_CACHE = _TMDBCache()
 
 # Different endpoints change at different rates - cache them accordingly.
 DEFAULT_TTL = 60 * 15        # 15 min - general default
-LIST_TTL = 60 * 30           # 30 min - trending / top-rated / upcoming
+LIST_TTL = 60 * 10           # 10 min - trending / top-rated / upcoming
 SEARCH_TTL = 60 * 10         # 10 min - search results
 DETAILS_TTL = 60 * 60 * 6    # 6 hours - a given movie's details rarely change
 
