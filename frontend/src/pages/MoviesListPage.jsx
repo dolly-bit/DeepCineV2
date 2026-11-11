@@ -74,7 +74,7 @@ export default function MoviesListPage() {
     return () => {
       isMounted = false;
     };
-  }, [location.state?.mode, location.state?.query]);
+  }, [mode]);
 
   const visibleMovies = useMemo(() => movies.slice(0, 50), [movies]);
 
