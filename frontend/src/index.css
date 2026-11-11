@@ -529,3 +529,16 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 .dc-send-to-ai{display:flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid #276b70;border-radius:7px;background:#10343d;color:#73e1dc;font-size:9px;font-weight:800}
 .dc-send-to-ai:hover,.dc-ai-shortcuts button:hover{border-color:#56dcd5;background:#16434a}
 @media(max-width:700px){.dc-results-actions{align-items:flex-start;flex-direction:column;gap:9px}}
+
+/* Movie detail explicit preference controls */
+.dc-movie-feedback{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin-top:20px;padding:13px 15px;border:1px solid #25434d;border-radius:10px;background:#081b25}
+.dc-rating-control{display:flex;align-items:center;gap:12px}
+.dc-rating-control>span{color:#83a1ab;font-size:8px;font-weight:850;letter-spacing:.13em}
+.dc-rating-control>div{display:flex;align-items:center;gap:3px}
+.dc-rating-control>div button{padding:3px;color:#e8bd61;transition:transform .15s}
+.dc-rating-control>div button:hover{transform:scale(1.15)}
+.dc-rating-control>div button:disabled,.dc-watchlist-toggle:disabled{opacity:.5}
+.dc-rating-remove{color:#8da8b1;font-size:9px}
+.dc-watchlist-toggle{display:flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid #28616a;border-radius:7px;background:#10343d;color:#79e2dc;font-size:9px;font-weight:800}
+.dc-watchlist-toggle.saved{border-color:#357b69;background:#12372f;color:#8ee2bd}
+.dc-feedback-message{flex-basis:100%;color:#83b9b4;font-size:9px}
