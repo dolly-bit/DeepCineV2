@@ -27,7 +27,7 @@ export default function Landing() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#08070C] text-white">
+    <div className="dc-landing-page min-h-screen bg-[#07131d] text-white">
 
       <Navbar publicMode hideSearch />
 
