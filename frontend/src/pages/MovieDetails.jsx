@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Calendar, Clock, Star, Play } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, Star, Play, Bookmark, Check } from "lucide-react";
 import {
   getMovieCast,
   getSimilarMovies,
   getMovieDetails,
   getMovieTrailer,
   recordWatch,
+  getMyRatings, saveMovieRating, deleteMovieRating, getWatchlist, addToWatchlist, removeFromWatchlist,
 } from "../services/movies";
 import MovieCard from "../components/home/MovieCard";
 import PosterImage from "../components/ui/PosterImage";
@@ -50,6 +51,10 @@ export default function MovieDetails() {
   const loading = loadedMovieId !== id;
   const [cast, setCast] = useState([]);
   const [similarMovies, setSimilarMovies] = useState([]);
+  const [myRating, setMyRating] = useState(0);
+  const [watchlisted, setWatchlisted] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +74,11 @@ export default function MovieDetails() {
 
         // Opening a movie details page is recorded as a watch-history signal.
         recordWatch(movieData.id);
+        Promise.all([getMyRatings(), getWatchlist()]).then(([ratings, watchlist]) => {
+          if (cancelled) return;
+          setMyRating(ratings.find((item) => item.tmdb_id === movieData.id)?.rating || 0);
+          setWatchlisted(watchlist.some((item) => item.tmdb_id === movieData.id));
+        }).catch((err) => console.error("Could not load movie feedback", err));
       })
       .catch((err) => {
         console.error(err);
@@ -168,6 +178,34 @@ export default function MovieDetails() {
               {movie.overview}
             </p>
 
+            <div className="dc-movie-feedback">
+              <div className="dc-rating-control">
+                <span>YOUR RATING</span>
+                <div role="group" aria-label="Rate this movie from one to five stars">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button key={value} type="button" disabled={feedbackLoading} aria-label={"Rate " + value + " out of 5"} aria-pressed={myRating === value} onClick={async () => {
+                      setFeedbackLoading(true); setFeedbackMessage("");
+                      try { await saveMovieRating(movie.id, value); setMyRating(value); setFeedbackMessage("Your rating was saved."); }
+                      catch (err) { console.error(err); setFeedbackMessage("Could not save your rating. Sign in and ensure this movie is in the catalogue."); }
+                      finally { setFeedbackLoading(false); }
+                    }}><Star size={18} fill={value <= myRating ? "currentColor" : "none"} /></button>
+                  ))}
+                </div>
+                {myRating > 0 && <button className="dc-rating-remove" type="button" disabled={feedbackLoading} onClick={async () => {
+                  setFeedbackLoading(true); setFeedbackMessage("");
+                  try { await deleteMovieRating(movie.id); setMyRating(0); setFeedbackMessage("Your rating was removed."); }
+                  catch (err) { console.error(err); setFeedbackMessage("Could not remove your rating."); }
+                  finally { setFeedbackLoading(false); }
+                }}>Clear</button>}
+              </div>
+              <button className={"dc-watchlist-toggle" + (watchlisted ? " saved" : "")} type="button" disabled={feedbackLoading} onClick={async () => {
+                setFeedbackLoading(true); setFeedbackMessage("");
+                try { if (watchlisted) { await removeFromWatchlist(movie.id); setWatchlisted(false); setFeedbackMessage("Removed from your watchlist."); } else { await addToWatchlist(movie.id); setWatchlisted(true); setFeedbackMessage("Added to your watchlist."); } }
+                catch (err) { console.error(err); setFeedbackMessage("Could not update your watchlist. Sign in and ensure this movie is in the catalogue."); }
+                finally { setFeedbackLoading(false); }
+              }}>{watchlisted ? <Check size={15}/> : <Bookmark size={15}/>} {watchlisted ? "In My List" : "Add to My List"}</button>
+              {feedbackMessage && <span className="dc-feedback-message" role="status">{feedbackMessage}</span>}
+            </div>
             <div className="mt-6 flex gap-3">
               {trailer && (
                 <a
