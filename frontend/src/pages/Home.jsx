@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, Users, History, Search } from "lucide-react";
 
 import Navbar from "../components/layout/Navbar";
@@ -64,30 +64,35 @@ export default function Home() {
 
   const { userId } = getAuthState();
 
-  const loadMovies = useCallback(async () => {
-    try {
-      const [trend, top, up] = await Promise.all([
-        getTrendingMovies(),
-        getTopRatedMovies(),
-        getUpcomingMovies(),
-      ]);
-
-      setTrending(trend || []);
-      setTopRated(top || []);
-      setUpcoming(filterFutureMovies(up || []));
-    } catch (err) {
-      console.error(err);
-      setTrending([]);
-      setTopRated([]);
-      setUpcoming([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadMovies();
-  }, [loadMovies]);
+    let cancelled = false;
+
+    Promise.all([
+      getTrendingMovies(),
+      getTopRatedMovies(),
+      getUpcomingMovies(),
+    ])
+      .then(([trend, top, up]) => {
+        if (cancelled) return;
+        setTrending(trend || []);
+        setTopRated(top || []);
+        setUpcoming(filterFutureMovies(up || []));
+      })
+      .catch((err) => {
+        console.error(err);
+        if (cancelled) return;
+        setTrending([]);
+        setTopRated([]);
+        setUpcoming([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#08070C] text-white">
