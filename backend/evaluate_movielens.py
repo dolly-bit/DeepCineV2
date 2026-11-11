@@ -495,53 +495,70 @@ def run(args):
             )
 
         eligible_user_count = len(eligible)
-        sampled_users = sample_evaluation_users(
-            eligible, sample_size=args.evaluation_users, seed=args.evaluation_seed
+        validation_users = sample_evaluation_users(
+            eligible, sample_size=args.evaluation_users, seed=args.validation_seed
         )
-        # Fit ALS and all train-derived popularity statistics on the full
-        # eligible training population. Only materialize per-user rankings for
-        # the sampled evaluation users to keep ranking work bounded.
-        validation = {u: validation[u] & overlap_ids for u in sampled_users}
-        test = {u: test[u] & overlap_ids for u in sampled_users}
+        test_users = sample_evaluation_users(
+            eligible, sample_size=args.evaluation_users, seed=args.test_seed
+        )
+        # Independently sample validation and test cohorts. Rank their union;
+        # fit ALS and train-derived signals once on the full training population.
+        ranking_users = sorted(set(validation_users) | set(test_users))
+        validation_sample = {u: validation[u] & overlap_ids for u in validation_users}
+        test_sample = {u: test[u] & overlap_ids for u in test_users}
 
         overlap_movies = [catalog_by_id[item] for item in sorted(overlap_ids)]
         signals = build_signal_rankings(
             db, train, overlap_movies, max(args.ks),
             als_factors=args.als_factors, seed=args.als_seed,
-            ranking_users=sampled_users,
+            ranking_users=ranking_users,
         )
-
-        # Validation-only weight selection. Test labels are not passed here.
-        tuning = tune_hybrid_weights(signals, validation, args.ks, overlap_ids, seed=args.tuning_seed)
-        hybrid = fuse_hybrid(signals, tuning["weights"], max(args.ks) * 10)
-
-        final_rankings = {
+        # Select weights using validation labels only, then freeze before test.
+        tuning = tune_hybrid_weights(
+            signals, validation_sample, args.ks, overlap_ids, seed=args.tuning_seed
+        )
+        hybrid = fuse_hybrid(
+            signals, tuning["weights"], max(args.ks) * 10, users=ranking_users
+        )
+        all_rankings = {
             "global_popularity": signals["global_popularity"],
             "personalized_popularity": signals["personalized_popularity"],
             "content": signals["content"],
             "collaborative": signals["collaborative"],
             "hybrid_tuned": hybrid,
             "hybrid_previous_weights": fuse_hybrid(
-                signals, DEFAULT_WEIGHTS, max(args.ks) * 10
+                signals, DEFAULT_WEIGHTS, max(args.ks) * 10, users=ranking_users
             ),
         }
         validation_rankings = {
-            name: rankings for name, rankings in final_rankings.items()
+            name: {u: rankings[u] for u in validation_users}
+            for name, rankings in all_rankings.items()
+        }
+        test_rankings = {
+            name: {u: rankings[u] for u in test_users}
+            for name, rankings in all_rankings.items()
         }
         validation_metrics = {
-            name: evaluate_rankings(rankings, validation, overlap_ids, args.ks, bootstrap_seed=args.bootstrap_seed)
+            name: evaluate_rankings(
+                rankings, validation_sample, overlap_ids, args.ks,
+                bootstrap_seed=args.bootstrap_seed,
+            )
             for name, rankings in validation_rankings.items()
         }
         test_metrics = {
-            name: evaluate_rankings(rankings, test, overlap_ids, args.ks, bootstrap_seed=args.bootstrap_seed)
-            for name, rankings in final_rankings.items()
+            name: evaluate_rankings(
+                rankings, test_sample, overlap_ids, args.ks,
+                bootstrap_seed=args.bootstrap_seed,
+            )
+            for name, rankings in test_rankings.items()
         }
-
         paired_comparisons = {}
         for k in args.ks:
-            hybrid_user = per_user_ranking_metrics(hybrid, test, k)
+            hybrid_user = per_user_ranking_metrics(
+                test_rankings["hybrid_tuned"], test_sample, k
+            )
             popularity_user = per_user_ranking_metrics(
-                signals["global_popularity"], test, k
+                test_rankings["global_popularity"], test_sample, k
             )
             paired_comparisons[str(k)] = {
                 metric: paired_bootstrap_difference_ci(
@@ -575,17 +592,20 @@ def run(args):
                 "test_ratio": args.test_ratio,
                 **split_stats,
                 "eligible_users_all_three_partitions": eligible_user_count,
-                "evaluation_users_sampled": len(sampled_users),
-                "evaluation_user_sample_size_requested": args.evaluation_users,
-                "evaluation_user_sample_method": "seeded uniform sample without replacement",
-                "evaluation_seed": args.evaluation_seed,
+                "validation_users_sampled": len(validation_users),
+                "test_users_sampled": len(test_users),
+                "evaluation_user_sample_size_requested_per_cohort": args.evaluation_users,
+                "evaluation_user_sample_method": "independent seeded uniform samples without replacement",
+                "validation_seed": args.validation_seed,
+                "test_seed": args.test_seed,
                 "model_fit_train_users": len(train),
                 "model_fit_train_interactions": sum(map(len, train.values())),
                 "evaluation_validation_interactions": sum(map(len, validation.values())),
                 "evaluation_test_interactions": sum(map(len, test.values())),
             },
             "reproducibility": {
-                "evaluation_seed": args.evaluation_seed,
+                "validation_seed": args.validation_seed,
+                "test_seed": args.test_seed,
                 "als_seed": args.als_seed,
                 "tuning_seed": args.tuning_seed,
                 "bootstrap_seed": args.bootstrap_seed,
@@ -603,10 +623,12 @@ def run(args):
                 "model_fit_data": "full eligible training partition",
                 "weight_selection_data": "validation partition only",
                 "final_reporting_data": "held-out test partition only",
-                "evaluation_population": "seeded uniform sample of eligible users",
-                "ranking_population": "sampled evaluation users",
+                "validation_population": "independent seeded uniform sample of eligible users",
+                "test_population": "independent seeded uniform sample of eligible users",
+                "ranking_population": "union of validation and test cohorts",
                 "training_population": "all eligible users",
-                "evaluation_users_sampled": len(sampled_users),
+                "validation_users_sampled": len(validation_users),
+                "test_users_sampled": len(test_users),
                 "objective": tuning["objective"],
                 "confidence_intervals": "95% percentile bootstrap over sampled users; 1000 resamples",
             },
@@ -621,11 +643,12 @@ def run(args):
                 "Personalized popularity uses training-only genre affinity and item interaction counts.",
                 "The final test partition must not be used to select weights or model settings.",
                 "Bootstrap intervals quantify uncertainty across sampled users for this run; repeated seeds are still required to assess run-to-run stability.",
-                "Metrics are estimated on a seeded uniform sample of eligible users, not the full eligible population.",
+                "Validation and test metrics use independently seeded user cohorts; overlap is possible but their samples are not intentionally coupled.",
+                "Metrics are estimated on seeded uniform samples of eligible users, not the full eligible population.",
             ],
         }
 
-        json_path = OUTPUT_DIR / f"movielens_phase4_{timestamp}.json"
+        json_path = OUTPUT_DIR / f"movielens_phase5_{timestamp}.json"
         json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         csv_path = OUTPUT_DIR / f"movielens_phase4_{timestamp}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
@@ -663,7 +686,8 @@ def parse_args():
     parser.add_argument("--ks", default="5,10,20")
     parser.add_argument("--als-factors", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42, help="legacy seed; fallback for all phase-4 seeds")
-    parser.add_argument("--evaluation-seed", type=int, default=None)
+    parser.add_argument("--validation-seed", type=int, default=None)
+    parser.add_argument("--test-seed", type=int, default=None)
     parser.add_argument("--als-seed", type=int, default=None)
     parser.add_argument("--tuning-seed", type=int, default=None)
     parser.add_argument("--bootstrap-seed", type=int, default=None)
@@ -673,7 +697,8 @@ def parse_args():
         help="maximum eligible users to evaluate (seeded uniform sample; default: 2000)",
     )
     args = parser.parse_args()
-    args.evaluation_seed = args.seed if args.evaluation_seed is None else args.evaluation_seed
+    args.validation_seed = args.seed if args.validation_seed is None else args.validation_seed
+    args.test_seed = args.seed + 1 if args.test_seed is None else args.test_seed
     args.als_seed = args.seed if args.als_seed is None else args.als_seed
     args.tuning_seed = args.seed if args.tuning_seed is None else args.tuning_seed
     args.bootstrap_seed = args.seed if args.bootstrap_seed is None else args.bootstrap_seed
