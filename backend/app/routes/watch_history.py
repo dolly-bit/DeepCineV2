@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.database.connection import get_db
-from app.models import WatchHistory
+from app.models import Movie, WatchHistory
 from app.models.user import User
 
 router = APIRouter(prefix="/watch-history", tags=["Watch History"])
@@ -15,7 +15,14 @@ def add_watch_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    history = WatchHistory(user_id=current_user.id, tmdb_id=tmdb_id)
+    movie = db.query(Movie).filter(Movie.tmdb_id == tmdb_id).first()
+    if movie is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Movie is not in the local catalog.",
+        )
+
+    history = WatchHistory(user_id=current_user.id, tmdb_id=movie.tmdb_id)
     db.add(history)
     db.commit()
     return {"message": "Watch history saved"}
