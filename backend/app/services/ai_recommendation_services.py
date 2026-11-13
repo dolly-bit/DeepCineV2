@@ -117,10 +117,26 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
     }
     excluded_db_ids.update(disliked_movie_ids)
 
-    content = recommend_for_user_content(user_id, db, top_k=100)
+    # Convert excluded local catalog IDs to TMDB IDs before fusion. Filtering
+    # only after top_k selection can waste slots on already-interacted movies.
+    excluded_tmdb_ids = set(interacted_movie_ids)
+    if excluded_db_ids:
+        excluded_tmdb_ids.update(
+            row[0] for row in db.query(Movie.tmdb_id).filter(
+                Movie.id.in_(excluded_db_ids)
+            ).all()
+        )
+
+    content = [
+        tmdb_id for tmdb_id in recommend_for_user_content(user_id, db, top_k=100)
+        if tmdb_id not in excluded_tmdb_ids
+    ]
     collaborative_ranking = [
-        tmdb_id for tmdb_id, _score
-        in collaborative.recommendation_scores_for_user(user_id, top_k=100)
+        tmdb_id
+        for tmdb_id, _score in collaborative.recommendation_scores_for_user(
+            user_id, top_k=100
+        )
+        if tmdb_id not in excluded_tmdb_ids
     ]
 
     preference_ranking = _rank_by_genre_affinity(
