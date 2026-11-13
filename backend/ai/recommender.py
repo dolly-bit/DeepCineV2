@@ -80,23 +80,6 @@ def _get_index_and_ids():
                     f"Content artifact integrity check failed for {name}."
                 )
 
-        embeddings = np.load(
-            str(artifact_paths["movie_embeddings.npy"]),
-            mmap_mode="r",
-            allow_pickle=False,
-        )
-        if (
-            embeddings.ndim != 2
-            or embeddings.dtype != np.float32
-            or embeddings.shape != (
-                manifest.get("movie_count"),
-                manifest.get("embedding_dimension"),
-            )
-        ):
-            raise ArtifactValidationError(
-                "Embedding matrix shape or dtype does not match the manifest."
-            )
-
         movie_ids = np.load(
             str(artifact_paths["movie_ids.npy"]), allow_pickle=False
         )
@@ -113,13 +96,32 @@ def _get_index_and_ids():
                 "Movie ID artifact contains duplicate IDs."
             )
 
-        index = faiss.read_index(str(artifact_paths["movie_index.faiss"]))
         expected_count = manifest.get("movie_count")
         expected_dimension = manifest.get("embedding_dimension")
         if not isinstance(expected_count, int) or expected_count != len(movie_ids):
             raise ArtifactValidationError(
                 "Manifest movie count does not match the movie ID mapping."
             )
+        if not isinstance(expected_dimension, int) or expected_dimension <= 0:
+            raise ArtifactValidationError(
+                "Manifest embedding dimension must be a positive integer."
+            )
+
+        embeddings = np.load(
+            str(artifact_paths["movie_embeddings.npy"]),
+            mmap_mode="r",
+            allow_pickle=False,
+        )
+        if (
+            embeddings.ndim != 2
+            or embeddings.dtype != np.float32
+            or embeddings.shape != (expected_count, expected_dimension)
+        ):
+            raise ArtifactValidationError(
+                "Embedding matrix shape or dtype does not match the manifest."
+            )
+
+        index = faiss.read_index(str(artifact_paths["movie_index.faiss"]))
         if index.ntotal != len(movie_ids):
             raise ArtifactValidationError(
                 "FAISS vector count does not match the movie ID mapping."
