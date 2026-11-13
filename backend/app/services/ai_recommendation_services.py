@@ -171,13 +171,7 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
     if not fused_ids:
         return []
 
-    # Final safety filter: never return titles already watched, rated or saved.
-    excluded_tmdb_ids = set(interacted_movie_ids)
-    excluded_tmdb_ids.update(
-        movie.tmdb_id for movie in db.query(Movie).filter(
-            Movie.id.in_(excluded_db_ids)
-        ).all()
-    )
+    # Final defensive filter in case a future ranking source omits exclusions.
     fused_ids = [mid for mid in fused_ids if mid not in excluded_tmdb_ids]
     if not fused_ids:
         return []
