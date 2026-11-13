@@ -1,5 +1,5 @@
 import { Compass, Home, Library, Sparkles, Film, Search } from "lucide-react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 const items = [
   { label: "Home", to: "/home", icon: Home, end: true },
   { label: "Movie Collections", to: "/movies", icon: Film, state: { mode: "trending", title: "Movie Collections" } },
@@ -9,7 +9,6 @@ const items = [
 ];
 export default function HomeSidebar() {
   const navigate = useNavigate();
-  const location = useLocation();
   return <aside className="dc-side-panel">
     <NavLink to="/home" className="dc-side-brand"><span className="dc-side-mark">D</span><span>Deep<span>Cine</span></span></NavLink>
     <div className="dc-side-label">LIBRARY</div>
