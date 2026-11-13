@@ -5,7 +5,6 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.connection import Base
 from app.models import (
-    Genre,
     Movie,
     MovieGenre,
     Rating,
