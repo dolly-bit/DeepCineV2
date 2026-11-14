@@ -3,10 +3,12 @@ from collections import defaultdict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import WatchHistory, Movie, MovieGenre, Rating, WatchlistItem
+from app.models import (
+    WatchHistory, Movie, MovieGenre, Genre, Rating, WatchlistItem
+)
 from ai import collaborative
 from ai.recommender import recommend_for_user_content
-from ai.ranking import reciprocal_rank_fusion
+from ai.ranking import reciprocal_rank_fusion, diversify_by_genre
 
 
 def _rank_by_genre_affinity(db: Session, genre_weights, excluded_movie_ids, top_k=100):
@@ -52,12 +54,10 @@ def _rank_by_genre_affinity(db: Session, genre_weights, excluded_movie_ids, top_
 
 
 def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20):
-    """Fuse behavioral, rating, watchlist, collaborative and popularity signals.
+    """Fuse behavioral, rating, watchlist, collaborative and popularity signals."""
+    if top_k <= 0:
+        return []
 
-    Explicit 4-5 star ratings and watchlist saves strengthen genre preferences.
-    1-2 star ratings weaken those genres and suppress the rated title. Neutral
-    3-star ratings are excluded from preference learning.
-    """
     history = db.query(WatchHistory).filter(
         WatchHistory.user_id == user_id
     ).order_by(WatchHistory.watched_at.desc()).all()
@@ -79,9 +79,7 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
         }
         excluded_db_ids.update(history_movie_ids)
 
-    # Genre affinity combines implicit watches with explicit user feedback.
     genre_weights = defaultdict(float)
-
     if interacted_movie_ids:
         watched_genres = (
             db.query(MovieGenre.genre_id)
@@ -102,7 +100,6 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
             feedback_genres[movie_id].append(genre_id)
 
     for rating in ratings:
-        # 4-5 stars strengthen a genre; 1-2 stars weaken it; 3 is neutral.
         weight = float(rating.value - 3) * 1.5
         for genre_id in feedback_genres.get(rating.movie_id, []):
             genre_weights[genre_id] += weight
@@ -111,14 +108,11 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
         for genre_id in feedback_genres.get(item.movie_id, []):
             genre_weights[genre_id] += 1.5
 
-    # Disliked titles are never recommended back to the user.
     disliked_movie_ids = {
         rating.movie_id for rating in ratings if rating.value <= 2
     }
     excluded_db_ids.update(disliked_movie_ids)
 
-    # Convert excluded local catalog IDs to TMDB IDs before fusion. Filtering
-    # only after top_k selection can waste slots on already-interacted movies.
     excluded_tmdb_ids = set(interacted_movie_ids)
     if excluded_db_ids:
         excluded_tmdb_ids.update(
@@ -143,7 +137,6 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
         db, genre_weights, excluded_db_ids, top_k=100
     )
 
-    # Popularity is a fallback signal, not the dominant personalization input.
     popular_query = db.query(Movie)
     if excluded_db_ids:
         popular_query = popular_query.filter(~Movie.id.in_(excluded_db_ids))
@@ -166,16 +159,100 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
             "explicit_preferences": 1.25,
             "popularity": 0.2,
         },
-        top_k=top_k,
+        top_k=max(top_k * 5, top_k),
     )
+    fused_ids = [
+        mid for mid in fused_ids if mid not in excluded_tmdb_ids
+    ]
     if not fused_ids:
         return []
 
-    # Final defensive filter in case a future ranking source omits exclusions.
-    fused_ids = [mid for mid in fused_ids if mid not in excluded_tmdb_ids]
-    if not fused_ids:
-        return []
+    # MMR-style reranking trades a controlled amount of rank relevance for
+    # genre variety. Missing genre metadata contributes no redundancy penalty.
+    genre_rows = (
+        db.query(Movie.tmdb_id, MovieGenre.genre_id)
+        .join(MovieGenre, MovieGenre.movie_id == Movie.id)
+        .filter(Movie.tmdb_id.in_(fused_ids))
+        .all()
+    )
+    genres_by_item = defaultdict(set)
+    for tmdb_id, genre_id in genre_rows:
+        genres_by_item[tmdb_id].add(genre_id)
 
-    movies = db.query(Movie).filter(Movie.tmdb_id.in_(fused_ids)).all()
+    diversified_ids = diversify_by_genre(
+        fused_ids,
+        genres_by_item,
+        top_k=top_k,
+        relevance_weight=0.8,
+    )
+    movies = db.query(Movie).filter(Movie.tmdb_id.in_(diversified_ids)).all()
     by_tmdb_id = {movie.tmdb_id: movie for movie in movies}
-    return [by_tmdb_id[mid] for mid in fused_ids if mid in by_tmdb_id]
+    return [by_tmdb_id[mid] for mid in diversified_ids if mid in by_tmdb_id]
+
+
+def build_recommendation_explanations(user_id: int, movies, db: Session):
+    """Explain recommendations using observed positive user signals and genres."""
+    if not movies:
+        return {}
+
+    positive_movie_ids = set(
+        row[0] for row in db.query(Movie.id)
+        .join(WatchHistory, WatchHistory.tmdb_id == Movie.tmdb_id)
+        .filter(WatchHistory.user_id == user_id)
+        .all()
+    )
+    positive_movie_ids.update(
+        row[0] for row in db.query(Rating.movie_id).filter(
+            Rating.user_id == user_id,
+            Rating.value >= 4,
+        ).all()
+    )
+    positive_movie_ids.update(
+        row[0] for row in db.query(WatchlistItem.movie_id).filter(
+            WatchlistItem.user_id == user_id
+        ).all()
+    )
+
+    genre_preference = defaultdict(int)
+    if positive_movie_ids:
+        preference_rows = db.query(MovieGenre.genre_id).filter(
+            MovieGenre.movie_id.in_(positive_movie_ids)
+        ).all()
+        for (genre_id,) in preference_rows:
+            genre_preference[genre_id] += 1
+
+    candidate_ids = [movie.id for movie in movies]
+    candidate_genres = defaultdict(list)
+    rows = (
+        db.query(Movie.id, Genre.name)
+        .join(MovieGenre, MovieGenre.movie_id == Movie.id)
+        .join(Genre, Genre.id == MovieGenre.genre_id)
+        .filter(Movie.id.in_(candidate_ids))
+        .all()
+    )
+    for movie_id, genre_name in rows:
+        candidate_genres[movie_id].append(genre_name)
+
+    explanations = {}
+    for movie in movies:
+        matched = [
+            name for name in candidate_genres.get(movie.id, [])
+            if name in {
+                row[0] for row in db.query(Genre.name).join(
+                    MovieGenre, MovieGenre.genre_id == Genre.id
+                ).filter(
+                    MovieGenre.movie_id.in_(positive_movie_ids)
+                ).distinct().all()
+            }
+        ] if positive_movie_ids else []
+        if matched:
+            explanations[movie.tmdb_id] = (
+                "Matches genres from your watched, highly rated, or saved movies: "
+                + ", ".join(matched[:2])
+            )
+        else:
+            explanations[movie.tmdb_id] = (
+                "Selected by combining content similarity, collaborative signals "
+                "when available, and catalog popularity."
+            )
+    return explanations
