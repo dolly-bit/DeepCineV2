@@ -19,7 +19,7 @@ def upgrade() -> None:
         sa.Column("username", sa.String(length=100), nullable=False),
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
-        sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), nullable=True),
         sa.UniqueConstraint("username"),
         sa.UniqueConstraint("email"),
     )
@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("vote_count", sa.Integer(), nullable=True),
         sa.Column("popularity", sa.Float(), nullable=True),
         sa.Column("original_language", sa.String(length=10), nullable=True),
-        sa.Column("adult", sa.Boolean(), server_default=sa.false(), nullable=True),
+        sa.Column("adult", sa.Boolean(), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=True),
         sa.Column("tagline", sa.Text(), nullable=True),
         sa.UniqueConstraint("tmdb_id"),
