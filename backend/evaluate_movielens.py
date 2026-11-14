@@ -41,6 +41,8 @@ DEFAULT_WEIGHTS = {
 WEIGHT_GRID = (0.5, 1.0, 2.0)
 DEFAULT_EVALUATION_USER_SAMPLE_SIZE = 2_000
 TUNING_USER_SAMPLE_SIZE = 2_000
+QUICK_TUNING_USER_SAMPLE_SIZE = 100
+QUICK_WEIGHT_GRID = (0.5, 1.0)
 
 
 def load_movie_mapping(links_path: str | Path, catalog_tmdb_ids: set[int]):
@@ -212,7 +214,7 @@ def paired_bootstrap_difference_ci(left, right, metric, seed=42, samples=1000):
     return bootstrap_mean_ci(differences, seed=seed, samples=samples)
 
 
-def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstrap_seed=42, include_ci=True):
+def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstrap_seed=42, include_ci=True, bootstrap_samples=1000):
     users = [u for u, items in relevant_by_user.items() if items]
     output = {}
     for k in ks:
@@ -235,13 +237,13 @@ def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstr
         if include_ci:
             metrics.update({
                 "precision_ci95": bootstrap_mean_ci(
-                    (row["precision"] for row in rows), seed=bootstrap_seed + k
+                    (row["precision"] for row in rows), seed=bootstrap_seed + k, samples=bootstrap_samples
                 ),
                 "recall_ci95": bootstrap_mean_ci(
-                    (row["recall"] for row in rows), seed=bootstrap_seed + 100 + k
+                    (row["recall"] for row in rows), seed=bootstrap_seed + 100 + k, samples=bootstrap_samples
                 ),
                 "ndcg_ci95": bootstrap_mean_ci(
-                    (row["ndcg"] for row in rows), seed=bootstrap_seed + 200 + k
+                    (row["ndcg"] for row in rows), seed=bootstrap_seed + 200 + k, samples=bootstrap_samples
                 ),
             })
         output[str(k)] = metrics
@@ -263,7 +265,7 @@ def select_ranking_users(train, ranking_users=None):
 
 def build_signal_rankings(
     db, train, catalog_movies, ks_max, als_factors=64, seed=42,
-    ranking_users=None,
+    ranking_users=None, als_iterations=20, embedding_batch_size=64,
 ):
     """Fit signals on all training users; materialize rankings only for selected users."""
     catalog_ids = {int(movie.tmdb_id) for movie in catalog_movies}
@@ -287,7 +289,8 @@ def build_signal_rankings(
         for item in ordered_ids
     ]
     embeddings = encoder.encode(
-        texts, batch_size=64, show_progress_bar=True
+        texts, batch_size=embedding_batch_size, show_progress_bar=True,
+        convert_to_numpy=True, normalize_embeddings=False,
     ).astype("float32")
     embeddings = _normalize_rows(embeddings)
     item_pos = {item: idx for idx, item in enumerate(ordered_ids)}
@@ -309,7 +312,7 @@ def build_signal_rankings(
     als = None
     if len(users) >= 2 and len(als_items) >= 2 and matrix.nnz:
         als = AlternatingLeastSquares(
-            factors=als_factors, regularization=0.05, iterations=20,
+            factors=als_factors, regularization=0.05, iterations=als_iterations,
             random_state=seed, num_threads=1,
         )
         # Prevent nested BLAS/OpenMP pools from oversubscribing CPU threads.
@@ -413,7 +416,7 @@ def fuse_hybrid(signal_rankings, weights, top_k, users=None):
     return hybrid
 
 
-def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed=42):
+def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed=42, tuning_user_limit=TUNING_USER_SAMPLE_SIZE, weight_grid=WEIGHT_GRID):
     """Select RRF weights on validation NDCG@10 (or largest available K)."""
     objective_k = 10 if 10 in ks else max(ks)
     # Tuning over every validation user for every grid point is needlessly
@@ -421,16 +424,16 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed
     # final validation/test reporting still uses every eligible user.
     available_users = sorted(validation)
     rng = np.random.default_rng(seed)
-    if len(available_users) > TUNING_USER_SAMPLE_SIZE:
+    if len(available_users) > tuning_user_limit:
         sampled_users = sorted(
-            rng.choice(available_users, size=TUNING_USER_SAMPLE_SIZE, replace=False).tolist()
+            rng.choice(available_users, size=tuning_user_limit, replace=False).tolist()
         )
     else:
         sampled_users = available_users
     tuning_validation = {u: validation[u] for u in sampled_users}
     best = None
     tested = 0
-    for values in itertools.product(WEIGHT_GRID, repeat=4):
+    for values in itertools.product(weight_grid, repeat=4):
         weights = dict(zip(
             ("content", "collaborative", "genre", "popularity"), values
         ))
@@ -450,7 +453,8 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed
         "objective_score": best["key"][0],
         "validation_precision_at_objective_k": best["key"][1],
         "weights": best["weights"],
-        "weight_grid": list(WEIGHT_GRID),
+        "weight_grid": list(weight_grid),
+        "tuning_user_limit": tuning_user_limit,
         "configurations_tested": tested,
         "tuning_users_sampled": len(sampled_users),
         "tuning_user_sample_method": "seeded uniform sample without replacement",
@@ -511,11 +515,13 @@ def run(args):
         signals = build_signal_rankings(
             db, train, overlap_movies, max(args.ks),
             als_factors=args.als_factors, seed=args.als_seed,
-            ranking_users=ranking_users,
+            ranking_users=ranking_users, als_iterations=args.als_iterations,
+            embedding_batch_size=args.embedding_batch_size,
         )
         # Select weights using validation labels only, then freeze before test.
         tuning = tune_hybrid_weights(
-            signals, validation_sample, args.ks, overlap_ids, seed=args.tuning_seed
+            signals, validation_sample, args.ks, overlap_ids, seed=args.tuning_seed,
+            tuning_user_limit=args.tuning_users, weight_grid=args.weight_grid,
         )
         hybrid = fuse_hybrid(
             signals, tuning["weights"], max(args.ks) * 10, users=ranking_users
@@ -541,7 +547,7 @@ def run(args):
         validation_metrics = {
             name: evaluate_rankings(
                 rankings, validation_sample, overlap_ids, args.ks,
-                bootstrap_seed=args.bootstrap_seed,
+                bootstrap_seed=args.bootstrap_seed, bootstrap_samples=args.bootstrap_samples,
             )
             for name, rankings in validation_rankings.items()
         }
@@ -564,6 +570,7 @@ def run(args):
                 metric: paired_bootstrap_difference_ci(
                     hybrid_user, popularity_user, metric,
                     seed=args.bootstrap_seed + 300 + k + offset,
+                    samples=args.bootstrap_samples,
                 )
                 for offset, metric in enumerate(("precision", "recall", "ndcg"))
             }
@@ -610,7 +617,10 @@ def run(args):
                 "tuning_seed": args.tuning_seed,
                 "bootstrap_seed": args.bootstrap_seed,
                 "als_factors": args.als_factors,
-                "als_iterations": 20,
+                "als_iterations": args.als_iterations,
+                "embedding_batch_size": args.embedding_batch_size,
+                "bootstrap_samples": args.bootstrap_samples,
+                "profile": args.profile,
                 "als_regularization": 0.05,
                 "blas_thread_limit": 1,
             },
@@ -630,7 +640,7 @@ def run(args):
                 "validation_users_sampled": len(validation_users),
                 "test_users_sampled": len(test_users),
                 "objective": tuning["objective"],
-                "confidence_intervals": "95% percentile bootstrap over sampled users; 1000 resamples",
+                "confidence_intervals": f"95% percentile bootstrap over sampled users; {args.bootstrap_samples} resamples",
             },
             "validation_metrics": validation_metrics,
             "test_metrics": test_metrics,
@@ -682,9 +692,14 @@ def parse_args():
     parser.add_argument("--train-ratio", type=float, default=0.6)
     parser.add_argument("--validation-ratio", type=float, default=0.2)
     parser.add_argument("--test-ratio", type=float, default=0.2)
-    parser.add_argument("--chunksize", type=int, default=500_000)
+    parser.add_argument("--profile", choices=("quick", "full"), default="quick", help="quick is intended for 8 GB CPU-only laptops; full retains the larger benchmark settings")
+    parser.add_argument("--chunksize", type=int, default=None)
     parser.add_argument("--ks", default="5,10,20")
-    parser.add_argument("--als-factors", type=int, default=64)
+    parser.add_argument("--als-factors", type=int, default=None)
+    parser.add_argument("--als-iterations", type=int, default=None)
+    parser.add_argument("--embedding-batch-size", type=int, default=None)
+    parser.add_argument("--bootstrap-samples", type=int, default=None)
+    parser.add_argument("--tuning-users", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42, help="legacy seed; fallback for validation, ALS, tuning, and bootstrap seeds")
     parser.add_argument("--validation-seed", type=int, default=None)
     parser.add_argument("--test-seed", type=int, default=None)
@@ -693,10 +708,24 @@ def parse_args():
     parser.add_argument("--bootstrap-seed", type=int, default=None)
     parser.add_argument(
         "--evaluation-users", type=int,
-        default=DEFAULT_EVALUATION_USER_SAMPLE_SIZE,
+        default=None,
         help="maximum eligible users to evaluate (seeded uniform sample; default: 2000)",
     )
     args = parser.parse_args()
+    if args.profile == "quick":
+        defaults = {"chunksize": 50_000, "als_factors": 32, "als_iterations": 8,
+                    "embedding_batch_size": 16, "bootstrap_samples": 200,
+                    "tuning_users": QUICK_TUNING_USER_SAMPLE_SIZE,
+                    "evaluation_users": 100, "weight_grid": QUICK_WEIGHT_GRID}
+    else:
+        defaults = {"chunksize": 500_000, "als_factors": 64, "als_iterations": 20,
+                    "embedding_batch_size": 64, "bootstrap_samples": 1000,
+                    "tuning_users": TUNING_USER_SAMPLE_SIZE,
+                    "evaluation_users": DEFAULT_EVALUATION_USER_SAMPLE_SIZE,
+                    "weight_grid": WEIGHT_GRID}
+    for name, value in defaults.items():
+        if getattr(args, name, None) is None:
+            setattr(args, name, value)
     args.validation_seed = args.seed if args.validation_seed is None else args.validation_seed
     args.test_seed = args.seed + 1 if args.test_seed is None else args.test_seed
     args.als_seed = args.seed if args.als_seed is None else args.als_seed
@@ -705,8 +734,10 @@ def parse_args():
     ratios = (args.train_ratio, args.validation_ratio, args.test_ratio)
     if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
         parser.error("train/validation/test ratios must be positive and sum to 1")
-    if args.chunksize <= 0 or args.als_factors <= 0 or args.evaluation_users <= 0:
-        parser.error("chunksize, ALS factors, and evaluation-users must be positive")
+    if (args.chunksize <= 0 or args.als_factors <= 0 or args.als_iterations <= 0
+            or args.embedding_batch_size <= 0 or args.bootstrap_samples <= 0
+            or args.tuning_users <= 0 or args.evaluation_users <= 0):
+        parser.error("chunksize, ALS factors/iterations, embedding batch size, bootstrap samples, tuning users, and evaluation-users must be positive")
     args.ks = tuple(sorted({int(value) for value in args.ks.split(",")}))
     if not args.ks or any(k <= 0 for k in args.ks):
         parser.error("--ks must contain positive integers")
