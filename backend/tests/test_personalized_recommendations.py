@@ -5,12 +5,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.connection import Base
 from app.models import (
-    Movie,
-    MovieGenre,
-    Rating,
-    User,
-    WatchHistory,
-    WatchlistItem,
+    Movie, MovieGenre, Genre, Rating, User, WatchHistory, WatchlistItem,
 )
 from app.services import ai_recommendation_services as recommendation_service
 
@@ -25,7 +20,6 @@ def db_session():
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
-
     try:
         yield session
     finally:
@@ -49,53 +43,39 @@ def seed_interactions(db):
     )
     db.add(user)
     db.flush()
-
     watched = add_movie(db, 101, "Already Watched")
     disliked = add_movie(db, 102, "Previously Disliked")
     saved = add_movie(db, 103, "Saved for Later")
     candidate_a = add_movie(db, 104, "Candidate A")
     candidate_b = add_movie(db, 105, "Candidate B")
-
     db.add(WatchHistory(user_id=user.id, tmdb_id=watched.tmdb_id))
     db.add(Rating(user_id=user.id, movie_id=disliked.id, value=1))
     db.add(WatchlistItem(user_id=user.id, movie_id=saved.id))
     db.commit()
-
     return user, [watched, disliked, saved, candidate_a, candidate_b]
 
 
 def test_interacted_movies_are_removed_before_rank_fusion(db_session, monkeypatch):
     user, movies = seed_interactions(db_session)
     raw_candidates = [movie.tmdb_id for movie in movies]
-
     monkeypatch.setattr(
-        recommendation_service,
-        "recommend_for_user_content",
+        recommendation_service, "recommend_for_user_content",
         lambda *_args, **_kwargs: raw_candidates,
     )
     monkeypatch.setattr(
-        recommendation_service.collaborative,
-        "recommendation_scores_for_user",
+        recommendation_service.collaborative, "recommendation_scores_for_user",
         lambda *_args, **_kwargs: [(tmdb_id, 1.0) for tmdb_id in raw_candidates],
     )
-
     captured_rankings = {}
 
     def capture_fusion(rankings, weights=None, top_k=20, **_kwargs):
         captured_rankings.update(rankings)
-        # Return the first eligible IDs from the content ranking.
         return rankings["content"][:top_k]
 
-    monkeypatch.setattr(
-        recommendation_service,
-        "reciprocal_rank_fusion",
-        capture_fusion,
-    )
-
+    monkeypatch.setattr(recommendation_service, "reciprocal_rank_fusion", capture_fusion)
     results = recommendation_service.get_personalized_recommendations(
         user.id, db_session, top_k=2
     )
-
     assert captured_rankings["content"] == [104, 105]
     assert captured_rankings["collaborative"] == [104, 105]
     assert [movie.tmdb_id for movie in results] == [104, 105]
@@ -106,22 +86,36 @@ def test_recommendations_do_not_return_watched_disliked_or_saved_movies(
 ):
     user, movies = seed_interactions(db_session)
     raw_candidates = [movie.tmdb_id for movie in movies]
-
     monkeypatch.setattr(
-        recommendation_service,
-        "recommend_for_user_content",
+        recommendation_service, "recommend_for_user_content",
         lambda *_args, **_kwargs: raw_candidates,
     )
     monkeypatch.setattr(
-        recommendation_service.collaborative,
-        "recommendation_scores_for_user",
+        recommendation_service.collaborative, "recommendation_scores_for_user",
         lambda *_args, **_kwargs: [(tmdb_id, 1.0) for tmdb_id in raw_candidates],
     )
-
     results = recommendation_service.get_personalized_recommendations(
         user.id, db_session, top_k=5
     )
-
     result_ids = {movie.tmdb_id for movie in results}
     assert result_ids.isdisjoint({101, 102, 103})
     assert result_ids == {104, 105}
+
+
+def test_explanations_name_genres_from_positive_user_history(db_session):
+    user, movies = seed_interactions(db_session)
+    sci_fi = Genre(tmdb_id=878, name="Science Fiction")
+    db_session.add(sci_fi)
+    db_session.flush()
+    db_session.add_all([
+        MovieGenre(movie_id=movies[0].id, genre_id=sci_fi.id),
+        MovieGenre(movie_id=movies[3].id, genre_id=sci_fi.id),
+    ])
+    db_session.commit()
+    explanations = recommendation_service.build_recommendation_explanations(
+        user.id, [movies[3], movies[4]], db_session
+    )
+    assert "Science Fiction" in explanations[104]
+    assert explanations[105].startswith(
+        "Selected by the personalized ranking model"
+    )
