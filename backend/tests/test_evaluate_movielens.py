@@ -67,12 +67,12 @@ def test_validation_tuning_uses_validation_labels_and_returns_weights():
     signals = {
         "content": {1: [10, 11], 2: [20, 21]},
         "collaborative": {1: [11, 10], 2: [21, 20]},
-        "genre": {1: [10, 12], 2: [20, 22]},
+        "explicit_preferences": {1: [10, 12], 2: [20, 22]},
         "global_popularity": {1: [12, 11], 2: [22, 21]},
     }
     validation = {1: {10}, 2: {20}}
     result = tune_hybrid_weights(signals, validation, [1, 2], {10, 11, 12, 20, 21, 22})
-    assert set(result["weights"]) == {"content", "collaborative", "genre", "popularity"}
+    assert set(result["weights"]) == {"content", "collaborative", "explicit_preferences", "popularity"}
     assert result["configurations_tested"] == 81
     assert result["tuning_users_sampled"] == 2
     assert result["objective"].startswith("validation_ndcg_at_")
