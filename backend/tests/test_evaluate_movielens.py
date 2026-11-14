@@ -9,6 +9,9 @@ from evaluate_movielens import (
     select_ranking_users,
     tune_hybrid_weights,
     rank_content_by_min_l2,
+    intra_list_diversity,
+    item_novelty,
+    evaluate_diversity_novelty,
 )
 
 
@@ -180,3 +183,43 @@ def test_production_content_l2_handles_empty_and_invalid_inputs():
     assert rank_content_by_min_l2(vectors, [1, 2], set(), 10, 5) == []
     with pytest.raises(ValueError):
         rank_content_by_min_l2(vectors, [1], {1}, 10, 5)
+
+
+
+def test_intra_list_diversity_uses_pairwise_jaccard_distance():
+    diversity = intra_list_diversity(
+        [10, 20, 30],
+        {
+            10: {"action", "comedy"},
+            20: {"action"},
+            30: {"drama"},
+        },
+    )
+    # Distances: 0.5, 1.0, 1.0.
+    assert diversity == 5 / 6
+
+
+def test_intra_list_diversity_skips_pairs_with_missing_genres():
+    assert intra_list_diversity([10, 20], {10: {"action"}, 20: set()}) == 0.0
+
+
+def test_item_novelty_uses_smoothed_training_frequency():
+    rare = item_novelty(99, {10: 9}, total_interactions=9, catalog_size=2)
+    popular = item_novelty(10, {10: 9}, total_interactions=9, catalog_size=2)
+    assert rare > popular
+
+
+def test_diversity_novelty_evaluation_is_deterministic():
+    rankings = {1: [10, 20], 2: [20, 30]}
+    genres = {10: {"action"}, 20: {"action", "comedy"}, 30: {"drama"}}
+    first = evaluate_diversity_novelty(
+        rankings, [1, 2], genres, {10: 8, 20: 1}, 9, 3, [2],
+        bootstrap_seed=7, bootstrap_samples=100,
+    )
+    second = evaluate_diversity_novelty(
+        rankings, [1, 2], genres, {10: 8, 20: 1}, 9, 3, [2],
+        bootstrap_seed=7, bootstrap_samples=100,
+    )
+    assert first == second
+    assert first["2"]["intra_list_diversity"] > 0
+    assert first["2"]["novelty_bits"] > 0
