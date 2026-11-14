@@ -181,7 +181,8 @@ python run.py
 ```
 
 The API listens on `http://127.0.0.1:8000` by default.
-- Liveness: `http://127.0.0.1:8000/health/live` (legacy `/health` remains supported).\n- Readiness: `http://127.0.0.1:8000/health/ready` (returns HTTP 503 when the database is unavailable).
+- Liveness: `http://127.0.0.1:8000/health/live` (legacy `/health` remains supported).
+- Readiness: `http://127.0.0.1:8000/health/ready` (returns HTTP 503 when the database is unavailable).
 - Interactive API documentation: `http://127.0.0.1:8000/docs`
 
 ### 4. Configure and start the frontend
