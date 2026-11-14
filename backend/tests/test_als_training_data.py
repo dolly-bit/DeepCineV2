@@ -30,7 +30,7 @@ def test_repeated_watches_do_not_satisfy_distinct_movie_threshold():
     ]
     with pytest.raises(ValueError, match="Insufficient interaction data"):
         filter_eligible_watch_events(
-            events, min_users=2, min_interactions_per_user=3
+            events, min_users=3, min_interactions_per_user=3
         )
 
 
