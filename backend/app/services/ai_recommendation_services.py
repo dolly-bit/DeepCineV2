@@ -222,6 +222,7 @@ def build_recommendation_explanations(user_id: int, movies, db: Session):
     positive_movie_ids.difference_update(negative_movie_ids)
 
     positive_genre_ids = set()
+    genre_names = {}
     if positive_movie_ids:
         preference_rows = (
             db.query(Genre.id, Genre.name)
