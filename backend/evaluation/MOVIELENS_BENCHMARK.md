@@ -14,7 +14,7 @@ The benchmark streams MovieLens ratings, maps movie IDs to the current DeepCine 
 
 - Per-user chronological 60/20/20 train/validation/test split. Users need at least three positive catalog interactions.
 - ALS, content user profiles, popularity counts, and genre profiles are built from training interactions only.
-- Baselines: global training popularity, personalized popularity using training-derived genre affinity, content, and ALS collaborative.
+- Baselines: global training popularity, personalized popularity using training-derived genre affinity, production-faithful content retrieval (per-watched-item nearest neighbors under raw-vector L2, merged by minimum distance), cosine-profile content, and ALS collaborative.
 - The validation cohort and test cohort are independently sampled from eligible users without replacement within each cohort. Use `--validation-seed` and `--test-seed` to control them independently. The cohorts may overlap by chance; they are not forced to be disjoint.
 - Recommendation rankings are materialized for the union of both cohorts. ALS and train-derived signals are fitted once on the full eligible training population.
 - RRF weights are selected from an 81-point deterministic grid using validation NDCG@10 (or the largest requested K if K=10 is absent). Tuning uses up to 2,000 users from the validation cohort, selected with `--tuning-seed`.
@@ -31,3 +31,10 @@ The candidate universe remains the MovieLens/DeepCine overlap, not the full 414-
 The validation and test cohorts are independently sampled, but they can overlap by chance. This is not a disjoint-user generalization experiment. Bootstrap intervals quantify uncertainty across sampled users conditional on the run; they do not eliminate dataset bias, catalog truncation, temporal-split limitations, or MovieLens-to-production domain shift.
 
 Do not select weights, model settings, or a preferred random seed based on test metrics. Use validation for decisions; test results are for final reporting only.
+
+
+## Content retrieval fidelity
+
+The primary `content` signal mirrors production `recommend_for_user_content`: raw SentenceTransformer vectors are indexed with FAISS `IndexFlatL2`; each training-watched item is queried independently; candidates are merged using their minimum L2 distance to any watched item; and watched items are excluded. The benchmark searches up to `max(30 * K_max, 50)` neighbors per watched item, matching production's default of 300 neighbors when `K_max=10` and `top_k=100`.
+
+The separate `cosine_profile_content` baseline averages normalized watched-item embeddings into one profile and ranks by cosine similarity. It is not the production content algorithm; it is retained only to compare aggregation strategies. Both methods use training interactions only.
