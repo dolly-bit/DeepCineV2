@@ -12,7 +12,24 @@ export default function MovieCard({ movie }) {
         <span className="dc-movie-rating"><Star size={11} fill="currentColor" /> {movie.vote_average ? movie.vote_average.toFixed(1) : "NR"}</span>
         <span className="dc-movie-open"><Play size={17} fill="currentColor" /></span>
       </div>
-      <div className="dc-movie-info"><h3>{movie.title}</h3><span>{year}</span></div>
+      <div className="dc-movie-info">
+        <h3>{movie.title}</h3>
+        <span>{year}</span>
+        {movie.recommendation_reason && (
+          <p
+            className="dc-movie-recommendation-reason"
+            style={{
+              margin: "6px 0 0",
+              fontSize: "11px",
+              lineHeight: 1.4,
+              opacity: 0.78,
+              maxWidth: "190px",
+            }}
+          >
+            {movie.recommendation_reason}
+          </p>
+        )}
+      </div>
     </article>
   );
 }
