@@ -8,6 +8,7 @@ from evaluate_movielens import (
     sample_evaluation_users,
     select_ranking_users,
     tune_hybrid_weights,
+    rank_content_by_min_l2,
 )
 
 
@@ -156,3 +157,26 @@ def test_validation_and_test_cohorts_are_independently_seeded():
     assert test == sample_evaluation_users(users, sample_size=500, seed=43)
     assert validation != test
     assert len(validation) == len(test) == 500
+
+
+def test_production_content_l2_uses_min_distance_and_excludes_watched():
+    import numpy as np
+
+    embeddings = np.asarray([
+        [0.0, 0.0], [10.0, 0.0], [0.2, 0.0], [3.0, 0.0], [10.1, 0.0]
+    ], dtype=np.float32)
+    ranked = rank_content_by_min_l2(
+        embeddings, [10, 20, 30, 40, 50], {10, 20},
+        candidate_limit=10, neighbors_per_watched=5,
+    )
+    assert ranked == [30, 40]
+
+
+def test_production_content_l2_handles_empty_and_invalid_inputs():
+    import numpy as np
+    import pytest
+
+    vectors = np.asarray([[0.0, 0.0], [1.0, 0.0]], dtype=np.float32)
+    assert rank_content_by_min_l2(vectors, [1, 2], set(), 10, 5) == []
+    with pytest.raises(ValueError):
+        rank_content_by_min_l2(vectors, [1], {1}, 10, 5)
