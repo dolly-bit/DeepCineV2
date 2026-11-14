@@ -269,6 +269,43 @@ def select_ranking_users(train, ranking_users=None):
     return users
 
 
+def rank_content_by_min_l2(embeddings, ordered_ids, watched_ids, candidate_limit, neighbors_per_watched):
+    """Mirror production: per-watched-item L2 neighbors merged by minimum distance."""
+    import faiss
+
+    if candidate_limit <= 0 or neighbors_per_watched <= 0:
+        return []
+    ids = [int(item) for item in ordered_ids]
+    if len(ids) != len(embeddings):
+        raise ValueError("Embedding rows must align with ordered_ids")
+    positions = {item: idx for idx, item in enumerate(ids)}
+    watched = sorted(set(watched_ids) & set(positions))
+    if not watched:
+        return []
+
+    vectors = np.asarray(embeddings, dtype=np.float32)
+    if vectors.ndim != 2 or not np.isfinite(vectors).all():
+        raise ValueError("Embeddings must be a finite 2D matrix")
+    index = faiss.IndexFlatL2(int(vectors.shape[1]))
+    index.add(vectors)
+    query_vectors = vectors[[positions[item] for item in watched]]
+    neighbor_count = min(len(ids), neighbors_per_watched)
+    distances, neighbor_positions = index.search(query_vectors, neighbor_count)
+
+    best_distance = {}
+    for distance_row, position_row in zip(distances, neighbor_positions):
+        for distance, position in zip(distance_row, position_row):
+            if position < 0 or position >= len(ids):
+                continue
+            item = ids[int(position)]
+            if item in watched:
+                continue
+            value = float(distance)
+            if item not in best_distance or value < best_distance[item]:
+                best_distance[item] = value
+    return sorted(best_distance, key=lambda item: (best_distance[item], item))[:candidate_limit]
+
+
 def build_signal_rankings(
     db, train, catalog_movies, ks_max, als_factors=64, seed=42,
     ranking_users=None, als_iterations=20, embedding_batch_size=64,
@@ -294,11 +331,12 @@ def build_signal_rankings(
         f"Language: {movies[item].original_language or ''}"
         for item in ordered_ids
     ]
+    # Raw vectors match the production FAISS IndexFlatL2 artifact.
     embeddings = encoder.encode(
         texts, batch_size=embedding_batch_size, show_progress_bar=True,
         convert_to_numpy=True, normalize_embeddings=False,
     ).astype("float32")
-    embeddings = _normalize_rows(embeddings)
+    cosine_embeddings = _normalize_rows(embeddings)
     item_pos = {item: idx for idx, item in enumerate(ordered_ids)}
 
     users = sorted(train)
@@ -334,7 +372,7 @@ def build_signal_rankings(
 
     signal_names = (
         "global_popularity", "personalized_popularity", "content",
-        "collaborative", "explicit_preferences",
+        "cosine_profile_content", "collaborative", "explicit_preferences",
     )
     signals = {name: {} for name in signal_names}
     candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
@@ -362,14 +400,19 @@ def build_signal_rankings(
 
         positions = [item_pos[item] for item in watched]
         profile = _normalize_rows(
-            embeddings[positions].mean(axis=0, keepdims=True)
+            cosine_embeddings[positions].mean(axis=0, keepdims=True)
         )[0]
-        content_scores = embeddings @ profile
-        content = sorted(
+        content_scores = cosine_embeddings @ profile
+        cosine_profile = sorted(
             unseen,
             key=lambda item: (float(content_scores[item_pos[item]]), item),
             reverse=True,
         )[:candidate_limit]
+        # Production default top_k=100 queries up to 300 neighbors per watched item.
+        content = rank_content_by_min_l2(
+            embeddings, ordered_ids, watched, candidate_limit,
+            neighbors_per_watched=max(ks_max * 30, 50),
+        )
 
         collaborative = []
         if als is not None and user in user_pos:
@@ -401,6 +444,7 @@ def build_signal_rankings(
         signals["global_popularity"][user] = global_pop
         signals["personalized_popularity"][user] = personalized_pop
         signals["content"][user] = content
+        signals["cosine_profile_content"][user] = cosine_profile
         signals["collaborative"][user] = collaborative
         signals["explicit_preferences"][user] = explicit_preferences[:candidate_limit]
     return signals
@@ -540,6 +584,7 @@ def run(args):
             "global_popularity": signals["global_popularity"],
             "personalized_popularity": signals["personalized_popularity"],
             "content": signals["content"],
+            "cosine_profile_content": signals["cosine_profile_content"],
             "collaborative": signals["collaborative"],
             "hybrid_tuned": hybrid,
             "hybrid_previous_weights": fuse_hybrid(
