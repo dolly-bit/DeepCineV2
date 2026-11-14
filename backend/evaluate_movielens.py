@@ -35,8 +35,14 @@ OUTPUT_DIR = Path(__file__).resolve().parent / "evaluation" / "results"
 DEFAULT_WEIGHTS = {
     "content": 1.0,
     "collaborative": 1.0,
-    "genre": 0.65,
+    "explicit_preferences": 0.65,
     "popularity": 0.25,
+}
+PRODUCTION_WEIGHTS = {
+    "content": 1.0,
+    "collaborative": 1.0,
+    "explicit_preferences": 1.25,
+    "popularity": 0.2,
 }
 WEIGHT_GRID = (0.5, 1.0, 2.0)
 DEFAULT_EVALUATION_USER_SAMPLE_SIZE = 2_000
@@ -328,7 +334,7 @@ def build_signal_rankings(
 
     signal_names = (
         "global_popularity", "personalized_popularity", "content",
-        "collaborative", "genre",
+        "collaborative", "explicit_preferences",
     )
     signals = {name: {} for name in signal_names}
     candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
@@ -376,15 +382,19 @@ def build_signal_rankings(
                 reverse=True,
             )[:candidate_limit]
 
-        genre_ranked = [
+        # Offline analogue of production _rank_by_genre_affinity: score by
+        # training-derived genre affinity, then break ties by catalog
+        # popularity and vote average. MovieLens positive interactions act
+        # as implicit watches; ratings/watchlist feedback are not simulated.
+        explicit_preferences = [
             item for item in unseen
-            if genres_by_item.get(item, set()) & preferred
+            if sum(genre_counts[g] for g in genres_by_item.get(item, set())) > 0
         ]
-        genre_ranked.sort(
+        explicit_preferences.sort(
             key=lambda item: (
                 sum(genre_counts[g] for g in genres_by_item[item]),
-                item_counts[item],
-                item,
+                max(float(movies[item].popularity or 0), 0.0),
+                float(movies[item].vote_average or 0),
             ),
             reverse=True,
         )
@@ -392,7 +402,7 @@ def build_signal_rankings(
         signals["personalized_popularity"][user] = personalized_pop
         signals["content"][user] = content
         signals["collaborative"][user] = collaborative
-        signals["genre"][user] = genre_ranked[:candidate_limit]
+        signals["explicit_preferences"][user] = explicit_preferences[:candidate_limit]
     return signals
 
 
@@ -407,7 +417,7 @@ def fuse_hybrid(signal_rankings, weights, top_k, users=None):
             {
                 "content": signals,
                 "collaborative": signal_rankings["collaborative"].get(user, []),
-                "genre": signal_rankings["genre"].get(user, []),
+                "explicit_preferences": signal_rankings["explicit_preferences"].get(user, []),
                 "popularity": signal_rankings["global_popularity"].get(user, []),
             },
             weights=weights,
@@ -435,7 +445,7 @@ def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed
     tested = 0
     for values in itertools.product(weight_grid, repeat=4):
         weights = dict(zip(
-            ("content", "collaborative", "genre", "popularity"), values
+            ("content", "collaborative", "explicit_preferences", "popularity"), values
         ))
         candidate = fuse_hybrid(
             signal_rankings, weights, max(ks) * 10, users=sampled_users
@@ -535,6 +545,9 @@ def run(args):
             "hybrid_previous_weights": fuse_hybrid(
                 signals, DEFAULT_WEIGHTS, max(args.ks) * 10, users=ranking_users
             ),
+            "hybrid_production_weights": fuse_hybrid(
+                signals, PRODUCTION_WEIGHTS, max(args.ks) * 10, users=ranking_users
+            ),
         }
         validation_rankings = {
             name: {u: rankings[u] for u in validation_users}
@@ -555,6 +568,7 @@ def run(args):
             name: evaluate_rankings(
                 rankings, test_sample, overlap_ids, args.ks,
                 bootstrap_seed=args.bootstrap_seed,
+                bootstrap_samples=args.bootstrap_samples,
             )
             for name, rankings in test_rankings.items()
         }
@@ -650,7 +664,8 @@ def run(args):
                 "Ratings >= threshold are implicit positives; this is not explicit rating prediction.",
                 "MovieLens users and interactions are external benchmark data, not production DeepCine users or watch history.",
                 "Per-user chronological splitting is not a global calendar-time split.",
-                "Personalized popularity uses training-only genre affinity and item interaction counts.",
+                "Offline explicit-preference ranking approximates production genre affinity using training-positive interactions and catalog popularity/vote-average tie-breaks; it does not simulate explicit ratings or watchlist feedback.",
+                "Production RRF weights are evaluated separately from validation-tuned weights; MovieLens positives are only an implicit-feedback approximation of production watch history.",
                 "The final test partition must not be used to select weights or model settings.",
                 "Bootstrap intervals quantify uncertainty across sampled users for this run; repeated seeds are still required to assess run-to-run stability.",
                 "Validation and test metrics use independently seeded user cohorts; overlap is possible but their samples are not intentionally coupled.",
