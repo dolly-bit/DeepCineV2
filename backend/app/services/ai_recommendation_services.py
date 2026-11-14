@@ -213,38 +213,37 @@ def build_recommendation_explanations(user_id: int, movies, db: Session):
         ).all()
     )
 
-    genre_preference = defaultdict(int)
+    positive_genre_ids = set()
+    genre_names = {}
     if positive_movie_ids:
-        preference_rows = db.query(MovieGenre.genre_id).filter(
-            MovieGenre.movie_id.in_(positive_movie_ids)
-        ).all()
-        for (genre_id,) in preference_rows:
-            genre_preference[genre_id] += 1
+        preference_rows = (
+            db.query(Genre.id, Genre.name)
+            .join(MovieGenre, MovieGenre.genre_id == Genre.id)
+            .filter(MovieGenre.movie_id.in_(positive_movie_ids))
+            .distinct()
+            .all()
+        )
+        positive_genre_ids = {genre_id for genre_id, _name in preference_rows}
+        genre_names.update({genre_id: name for genre_id, name in preference_rows})
 
     candidate_ids = [movie.id for movie in movies]
     candidate_genres = defaultdict(list)
     rows = (
-        db.query(Movie.id, Genre.name)
+        db.query(Movie.id, Genre.id, Genre.name)
         .join(MovieGenre, MovieGenre.movie_id == Movie.id)
         .join(Genre, Genre.id == MovieGenre.genre_id)
         .filter(Movie.id.in_(candidate_ids))
         .all()
     )
-    for movie_id, genre_name in rows:
-        candidate_genres[movie_id].append(genre_name)
+    for movie_id, genre_id, genre_name in rows:
+        candidate_genres[movie_id].append((genre_id, genre_name))
 
     explanations = {}
     for movie in movies:
         matched = [
-            name for name in candidate_genres.get(movie.id, [])
-            if name in {
-                row[0] for row in db.query(Genre.name).join(
-                    MovieGenre, MovieGenre.genre_id == Genre.id
-                ).filter(
-                    MovieGenre.movie_id.in_(positive_movie_ids)
-                ).distinct().all()
-            }
-        ] if positive_movie_ids else []
+            name for genre_id, name in candidate_genres.get(movie.id, [])
+            if genre_id in positive_genre_ids
+        ]
         if matched:
             explanations[movie.tmdb_id] = (
                 "Matches genres from your watched, highly rated, or saved movies: "
