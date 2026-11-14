@@ -181,7 +181,8 @@ python run.py
 ```
 
 The API listens on `http://127.0.0.1:8000` by default.
-- Health check: `http://127.0.0.1:8000/health`
+- Liveness: `http://127.0.0.1:8000/health/live` (legacy `/health` remains supported).
+- Readiness: `http://127.0.0.1:8000/health/ready` (returns HTTP 503 when the database is unavailable).
 - Interactive API documentation: `http://127.0.0.1:8000/docs`
 
 ### 4. Configure and start the frontend
@@ -253,7 +254,7 @@ When reporting results, include the dataset/catalog snapshot, split protocol, ca
 - **Model lifecycle:** collaborative training is offline; retrain and deploy the model deliberately as interaction data changes.
 - **Index lifecycle:** embedding/FAISS artifacts must be rebuilt after catalog changes and persisted or regenerated in ephemeral hosting.
 - **Scheduler deployment:** the catalog scheduler runs inside the API process. Multiple API workers or replicas can trigger duplicate jobs; a dedicated worker/scheduler is preferable for multi-instance deployments.
-- **Database migrations:** startup currently calls SQLAlchemy `create_all` to create missing tables. This is not a substitute for a versioned Alembic migration workflow in production.
+- **Database migrations:** schema changes are versioned with Alembic. Fresh databases run `alembic upgrade head`; databases created before Alembic must be backed up, schema-checked, and baselined with `alembic stamp 0001_initial_schema` before applying future migrations. See [backend/MIGRATIONS.md](./backend/MIGRATIONS.md).
 - **External dependency:** live catalog and movie-detail features depend on TMDB availability, credentials, and rate limits.
 - **Evaluation transfer:** offline MovieLens results do not establish recommendation performance for new DeepCine users.
 
