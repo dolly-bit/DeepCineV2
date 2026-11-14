@@ -6,7 +6,10 @@ from ai import collaborative
 from app.auth.dependencies import get_current_user
 from app.database.connection import get_db
 from app.models.user import User
-from app.services.ai_recommendation_services import get_personalized_recommendations
+from app.services.ai_recommendation_services import (
+    get_personalized_recommendations,
+    build_recommendation_explanations,
+)
 
 router = APIRouter(prefix="/recommend", tags=["Recommendations"])
 
@@ -19,7 +22,7 @@ def _require_self(user_id: int, current_user: User):
         )
 
 
-def _serialize_movie(movie):
+def _serialize_movie(movie, recommendation_reason=None):
     return {
         "id": movie.tmdb_id,
         "tmdb_id": movie.tmdb_id,
@@ -31,6 +34,7 @@ def _serialize_movie(movie):
         "overview": movie.overview,
         "vote_average": movie.vote_average or 0,
         "release_date": movie.release_date,
+        "recommendation_reason": recommendation_reason,
     }
 
 
@@ -58,9 +62,14 @@ def collaborative_recommendation(
 @router.get("/personalized/{user_id}")
 def personalized_recommendations(
     user_id: int,
+    top_k: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _require_self(user_id, current_user)
-    movies = get_personalized_recommendations(user_id, db)
-    return [_serialize_movie(movie) for movie in movies]
+    movies = get_personalized_recommendations(user_id, db, top_k=top_k)
+    explanations = build_recommendation_explanations(user_id, movies, db)
+    return [
+        _serialize_movie(movie, explanations.get(movie.tmdb_id))
+        for movie in movies
+    ]
