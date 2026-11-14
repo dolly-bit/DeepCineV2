@@ -212,9 +212,16 @@ def build_recommendation_explanations(user_id: int, movies, db: Session):
             WatchlistItem.user_id == user_id
         ).all()
     )
+    # Do not use explicitly disliked titles as positive evidence for an explanation.
+    negative_movie_ids = {
+        row[0] for row in db.query(Rating.movie_id).filter(
+            Rating.user_id == user_id,
+            Rating.value <= 2,
+        ).all()
+    }
+    positive_movie_ids.difference_update(negative_movie_ids)
 
     positive_genre_ids = set()
-    genre_names = {}
     if positive_movie_ids:
         preference_rows = (
             db.query(Genre.id, Genre.name)
