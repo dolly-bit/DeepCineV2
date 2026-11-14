@@ -1,8 +1,7 @@
 """
-Trains a collaborative-filtering recommender using ALS matrix factorization
-over implicit watch-history feedback.
+Trains an implicit-feedback ALS recommender from user watch history.
 
-Run manually after enough WatchHistory rows exist:
+Run from backend/ after collecting interaction data:
     python train_collaborative_model.py
 """
 
@@ -27,7 +26,10 @@ MANIFEST_PATH = BASE_DIR / "cf_model_manifest.json"
 N_FACTORS = 64
 REGULARIZATION = 0.05
 ITERATIONS = 20
-MIN_INTERACTIONS_PER_USER = 1
+# Minimum data gates prevent training a nominal ALS model on a tiny cohort.
+# Passing these gates is not proof of recommendation quality.
+MIN_USERS_FOR_ALS = 5
+MIN_INTERACTIONS_PER_USER = 3
 
 
 def _sha256(path: Path) -> str:
@@ -38,20 +40,66 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build_interaction_matrix(db):
-    """Build a confidence-weighted sparse user/movie interaction matrix."""
-    watch_events = db.query(WatchHistory).all()
+def filter_eligible_watch_events(
+    watch_events,
+    min_users=MIN_USERS_FOR_ALS,
+    min_interactions_per_user=MIN_INTERACTIONS_PER_USER,
+):
+    """Require enough users with enough distinct watched movies.
+
+    Repeated watches contribute to confidence after eligibility is determined,
+    but do not inflate a user's count of distinct movies.
+    """
+    if min_users < 1 or min_interactions_per_user < 1:
+        raise ValueError("ALS minimum thresholds must be positive.")
     if not watch_events:
         raise ValueError(
-            "No WatchHistory rows found - collaborative filtering needs "
-            "interaction data to train on. Seed some watch history first."
+            "No WatchHistory rows found. Collect user watch interactions first."
         )
 
-    user_ids = sorted({w.user_id for w in watch_events})
-    tmdb_ids = sorted({w.tmdb_id for w in watch_events})
+    distinct_items = {}
+    for event in watch_events:
+        distinct_items.setdefault(event.user_id, set()).add(event.tmdb_id)
+
+    eligible_users = {
+        user_id for user_id, item_ids in distinct_items.items()
+        if len(item_ids) >= min_interactions_per_user
+    }
+    if len(eligible_users) < min_users:
+        raise ValueError(
+            "Insufficient interaction data for ALS: "
+            f"{len(eligible_users)} users have at least "
+            f"{min_interactions_per_user} distinct watched movies; "
+            f"at least {min_users} eligible users are required. "
+            "Collect more independent user interactions. Use content-based "
+            "and popularity recommendations until then."
+        )
+
+    return [
+        event for event in watch_events if event.user_id in eligible_users
+    ]
+
+
+def build_interaction_matrix(
+    db,
+    min_users=MIN_USERS_FOR_ALS,
+    min_interactions_per_user=MIN_INTERACTIONS_PER_USER,
+):
+    """Build a confidence-weighted sparse user/movie interaction matrix."""
+    watch_events = db.query(WatchHistory).all()
+    watch_events = filter_eligible_watch_events(
+        watch_events,
+        min_users=min_users,
+        min_interactions_per_user=min_interactions_per_user,
+    )
+
+    user_ids = sorted({event.user_id for event in watch_events})
+    tmdb_ids = sorted({event.tmdb_id for event in watch_events})
     user_to_idx = {user_id: idx for idx, user_id in enumerate(user_ids)}
     item_to_idx = {tmdb_id: idx for idx, tmdb_id in enumerate(tmdb_ids)}
-    interaction_counts = Counter((w.user_id, w.tmdb_id) for w in watch_events)
+    interaction_counts = Counter(
+        (event.user_id, event.tmdb_id) for event in watch_events
+    )
 
     rows, cols, confidence = [], [], []
     for (user_id, tmdb_id), count in interaction_counts.items():
@@ -86,6 +134,8 @@ def _publish_artifacts(artifacts, matrix):
             "n_items": matrix.shape[1],
             "n_factors": N_FACTORS,
             "interaction_count": int(matrix.nnz),
+            "min_users_for_training": MIN_USERS_FOR_ALS,
+            "min_distinct_movies_per_user": MIN_INTERACTIONS_PER_USER,
             "artifact_sha256": _sha256(staged_model),
         }
         with tempfile.NamedTemporaryFile(
@@ -117,6 +167,7 @@ def train():
         regularization=REGULARIZATION,
         iterations=ITERATIONS,
         random_state=42,
+        num_threads=1,
     )
     model.fit(matrix)
 
@@ -131,12 +182,11 @@ def train():
     _publish_artifacts(artifacts, matrix)
 
     print(
-        f"Trained ALS collaborative-filtering model: "
-        f"{matrix.shape[0]} users x {matrix.shape[1]} movies, "
-        f"{matrix.nnz} interactions, {N_FACTORS} latent factors."
+        f"Trained ALS: {matrix.shape[0]} eligible users x {matrix.shape[1]} movies, "
+        f"{matrix.nnz} unique user/movie pairs, {N_FACTORS} latent factors."
     )
-    print(f"Saved to {MODEL_PATH}")
-    print(f"Manifest saved to {MANIFEST_PATH}")
+    print(f"Saved model to {MODEL_PATH}")
+    print(f"Saved manifest to {MANIFEST_PATH}")
 
 
 if __name__ == "__main__":
