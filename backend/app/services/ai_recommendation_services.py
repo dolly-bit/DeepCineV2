@@ -251,7 +251,6 @@ def build_recommendation_explanations(user_id: int, movies, db: Session):
             )
         else:
             explanations[movie.tmdb_id] = (
-                "Selected by combining content similarity, collaborative signals "
-                "when available, and catalog popularity."
+                "Selected by the personalized ranking model using the available signals."
             )
     return explanations
