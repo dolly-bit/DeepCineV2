@@ -3,10 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.core.config import settings
 
-# SQLite needs `check_same_thread=False` to work correctly with FastAPI,
-# which may access the same connection pool from different threads
-# (e.g. sync route handlers running in the threadpool). This has no
-# effect on Postgres/MySQL, so it's safe to always pass it conditionally.
+# SQLite needs check_same_thread=False when FastAPI sync handlers use threads.
 connect_args = (
     {"check_same_thread": False}
     if settings.DATABASE_URL.startswith("sqlite")
@@ -22,15 +19,19 @@ engine = create_engine(
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
 Base = declarative_base()
 
 
 def get_db():
+    """Yield one request-scoped session and rollback failed transactions."""
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
