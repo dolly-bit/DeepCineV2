@@ -56,8 +56,11 @@ FastAPI application
 2. Retrieve collaborative candidates when a trained ALS artifact and sufficient interaction data are available.
 3. Derive genre-affinity candidates from the user's recorded activity.
 4. Add a popularity-based candidate list as a fallback signal.
-5. Fuse ranked lists with reciprocal rank fusion.
-6. Apply the recommendation service's exclusion rules to previously consumed items.
+5. Fuse ranked lists with reciprocal rank fusion (RRF).
+6. Apply an MMR-style reranker that balances incoming rank relevance against maximum genre Jaccard overlap with already selected movies.
+7. Return a user-facing explanation when a candidate shares genres with the user's watched, highly rated, or saved movies. Explicitly disliked titles are not used as positive explanation evidence.
+
+The diversification parameter currently uses a relevance weight of 0.8. This is a heuristic, not a learned or empirically optimized parameter; its effect on ranking quality must be measured with offline evaluation. Explanations are evidence-based genre matches, not causal explanations of the model.
 
 The production recommendation service is implemented in `backend/app/services/ai_recommendation_services.py` and `backend/ai/`. The offline MovieLens benchmark is a separate evaluation workflow; its metrics must not be presented as measured production-user performance.
 
@@ -164,7 +167,7 @@ For older catalog records that do not have movie-genre relationships, run:
 python link_movie_genres.py
 ```
 
-Collaborative filtering requires watch-history interactions. After interactions have been collected, train the model:
+Collaborative filtering requires watch-history interactions from multiple users. Training now requires at least 5 eligible users with at least 3 distinct watched movies each; repeated watches do not satisfy the distinct-movie threshold. These are minimum data-quality gates, not proof of statistical quality. If the cohort is too small, training fails clearly and content/popularity recommendations remain the appropriate fallback. After enough interactions have been collected, train the model:
 
 ```powershell
 python train_collaborative_model.py
