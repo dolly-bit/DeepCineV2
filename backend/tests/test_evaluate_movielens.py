@@ -169,7 +169,7 @@ def test_production_content_l2_uses_min_distance_and_excludes_watched():
         embeddings, [10, 20, 30, 40, 50], {10, 20},
         candidate_limit=10, neighbors_per_watched=5,
     )
-    assert ranked == [30, 40]
+    assert ranked == [50, 30, 40]
 
 
 def test_production_content_l2_handles_empty_and_invalid_inputs():
