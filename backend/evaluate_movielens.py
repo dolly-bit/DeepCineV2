@@ -29,7 +29,7 @@ from threadpoolctl import threadpool_limits
 
 from app.database.connection import SessionLocal
 from app.models import Movie, MovieGenre
-from ai.ranking import reciprocal_rank_fusion
+from ai.ranking import reciprocal_rank_fusion, diversify_by_genre
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "evaluation" / "results"
 DEFAULT_WEIGHTS = {
@@ -254,6 +254,67 @@ def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstr
             })
         output[str(k)] = metrics
     return output
+
+
+def intra_list_diversity(recommended, genres_by_item):
+    """Mean pairwise Jaccard distance for recommendations with known genres."""
+    items = list(dict.fromkeys(recommended))
+    distances = []
+    for index, left in enumerate(items):
+        left_genres = set(genres_by_item.get(left, ()))
+        if not left_genres:
+            continue
+        for right in items[index + 1:]:
+            right_genres = set(genres_by_item.get(right, ()))
+            if not right_genres:
+                continue
+            union = left_genres | right_genres
+            similarity = len(left_genres & right_genres) / len(union) if union else 0.0
+            distances.append(1.0 - similarity)
+    return float(np.mean(distances)) if distances else 0.0
+
+
+def item_novelty(item_id, item_counts, total_interactions, catalog_size):
+    """Self-information in bits using smoothed training-only interaction frequency."""
+    denominator = total_interactions + catalog_size
+    if denominator <= 0:
+        return 0.0
+    probability = (item_counts.get(item_id, 0) + 1) / denominator
+    return -math.log2(probability)
+
+
+def evaluate_diversity_novelty(
+    rankings, candidate_users, genres_by_item, item_counts,
+    total_interactions, catalog_size, ks, bootstrap_seed=42,
+    bootstrap_samples=1000,
+):
+    """Macro-average intra-list diversity and training-only novelty by cutoff."""
+    output = {}
+    for k in ks:
+        diversity_values = []
+        novelty_values = []
+        for user in candidate_users:
+            recommended = rankings.get(user, [])[:k]
+            diversity_values.append(intra_list_diversity(recommended, genres_by_item))
+            novelty_values.append(
+                float(np.mean([
+                    item_novelty(item, item_counts, total_interactions, catalog_size)
+                    for item in recommended
+                ])) if recommended else 0.0
+            )
+        output[str(k)] = {
+            "intra_list_diversity": round(float(np.mean(diversity_values)), 6) if diversity_values else 0.0,
+            "novelty_bits": round(float(np.mean(novelty_values)), 6) if novelty_values else 0.0,
+            "intra_list_diversity_ci95": bootstrap_mean_ci(
+                diversity_values, seed=bootstrap_seed + 400 + k, samples=bootstrap_samples
+            ),
+            "novelty_bits_ci95": bootstrap_mean_ci(
+                novelty_values, seed=bootstrap_seed + 500 + k, samples=bootstrap_samples
+            ),
+            "users_evaluated": len(candidate_users),
+        }
+    return output
+
 
 def _normalize_rows(matrix):
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
@@ -580,6 +641,22 @@ def run(args):
         hybrid = fuse_hybrid(
             signals, tuning["weights"], max(args.ks) * 10, users=ranking_users
         )
+        # Compare MMR against identical tuned RRF candidates and weights.
+        genre_rows = db.query(Movie.tmdb_id, MovieGenre.genre_id).join(
+            MovieGenre, MovieGenre.movie_id == Movie.id
+        ).filter(Movie.tmdb_id.in_(overlap_ids)).all()
+        genres_by_item = defaultdict(set)
+        for tmdb_id, genre_id in genre_rows:
+            genres_by_item[int(tmdb_id)].add(genre_id)
+        hybrid_mmr = {
+            user: diversify_by_genre(
+                ranking, genres_by_item, top_k=max(args.ks) * 10,
+                relevance_weight=args.mmr_relevance_weight,
+            )
+            for user, ranking in hybrid.items()
+        }
+        train_item_counts = Counter(item for items in train.values() for item in items)
+        total_train_interactions = sum(train_item_counts.values())
         all_rankings = {
             "global_popularity": signals["global_popularity"],
             "personalized_popularity": signals["personalized_popularity"],
@@ -587,6 +664,7 @@ def run(args):
             "cosine_profile_content": signals["cosine_profile_content"],
             "collaborative": signals["collaborative"],
             "hybrid_tuned": hybrid,
+            "hybrid_tuned_mmr": hybrid_mmr,
             "hybrid_previous_weights": fuse_hybrid(
                 signals, DEFAULT_WEIGHTS, max(args.ks) * 10, users=ranking_users
             ),
@@ -617,7 +695,34 @@ def run(args):
             )
             for name, rankings in test_rankings.items()
         }
+        diversity_novelty_metrics = {
+            "validation": {
+                name: evaluate_diversity_novelty(
+                    {u: rankings[u] for u in validation_users},
+                    validation_users, genres_by_item, train_item_counts,
+                    total_train_interactions, len(overlap_ids), args.ks,
+                    bootstrap_seed=args.bootstrap_seed,
+                    bootstrap_samples=args.bootstrap_samples,
+                )
+                for name, rankings in {
+                    "hybrid_tuned": hybrid, "hybrid_tuned_mmr": hybrid_mmr,
+                }.items()
+            },
+            "test": {
+                name: evaluate_diversity_novelty(
+                    {u: rankings[u] for u in test_users},
+                    test_users, genres_by_item, train_item_counts,
+                    total_train_interactions, len(overlap_ids), args.ks,
+                    bootstrap_seed=args.bootstrap_seed + 1,
+                    bootstrap_samples=args.bootstrap_samples,
+                )
+                for name, rankings in {
+                    "hybrid_tuned": hybrid, "hybrid_tuned_mmr": hybrid_mmr,
+                }.items()
+            },
+        }
         paired_comparisons = {}
+        paired_mmr_comparisons = {}
         for k in args.ks:
             hybrid_user = per_user_ranking_metrics(
                 test_rankings["hybrid_tuned"], test_sample, k
@@ -629,6 +734,17 @@ def run(args):
                 metric: paired_bootstrap_difference_ci(
                     hybrid_user, popularity_user, metric,
                     seed=args.bootstrap_seed + 300 + k + offset,
+                    samples=args.bootstrap_samples,
+                )
+                for offset, metric in enumerate(("precision", "recall", "ndcg"))
+            }
+            mmr_user = per_user_ranking_metrics(
+                test_rankings["hybrid_tuned_mmr"], test_sample, k
+            )
+            paired_mmr_comparisons[str(k)] = {
+                metric: paired_bootstrap_difference_ci(
+                    mmr_user, hybrid_user, metric,
+                    seed=args.bootstrap_seed + 600 + k + offset,
                     samples=args.bootstrap_samples,
                 )
                 for offset, metric in enumerate(("precision", "recall", "ndcg"))
@@ -685,7 +801,13 @@ def run(args):
             },
             "hybrid_tuning": tuning,
             "evaluation": {
-                "metrics": ["precision", "recall", "ndcg", "coverage"],
+                "metrics": [
+                    "precision", "recall", "ndcg", "coverage",
+                    "intra_list_diversity", "novelty_bits",
+                ],
+                "diversity_definition": "mean pairwise Jaccard distance over genre sets; pairs with missing genre metadata are skipped",
+                "novelty_definition": "mean self-information in bits from smoothed item frequency in training interactions only",
+                "mmr_relevance_weight": args.mmr_relevance_weight,
                 "ks": args.ks,
                 "averaging": "macro average over each independently sampled cohort",
                 "coverage_denominator": "MovieLens/DeepCine overlapping catalog",
@@ -703,7 +825,9 @@ def run(args):
             },
             "validation_metrics": validation_metrics,
             "test_metrics": test_metrics,
+            "diversity_novelty_metrics": diversity_novelty_metrics,
             "paired_test_difference_hybrid_minus_global_popularity_ci95": paired_comparisons,
+            "paired_test_difference_mmr_minus_rrf_ci95": paired_mmr_comparisons,
             "limitations": [
                 "Results apply only to the MovieLens/DeepCine overlapping catalog, not the full DeepCine catalog.",
                 "Ratings >= threshold are implicit positives; this is not explicit rating prediction.",
@@ -715,6 +839,9 @@ def run(args):
                 "Bootstrap intervals quantify uncertainty across sampled users for this run; repeated seeds are still required to assess run-to-run stability.",
                 "Validation and test metrics use independently seeded user cohorts; overlap is possible but their samples are not intentionally coupled.",
                 "Metrics are estimated on seeded uniform samples of eligible users, not the full eligible population.",
+                "Genre diversity is measured only for item pairs with genre metadata; missing metadata can bias the metric.",
+                "Novelty uses training interaction frequency as a proxy for popularity, not user-perceived novelty.",
+                "MMR relevance weight is a heuristic and is compared against identical tuned RRF candidates.",
             ],
         }
 
@@ -749,6 +876,8 @@ def parse_args():
     parser.add_argument("--ratings-path", default="../datasets/movielens/ratings.csv")
     parser.add_argument("--links-path", default="../datasets/movielens/links.csv")
     parser.add_argument("--positive-threshold", type=float, default=4.0)
+    parser.add_argument("--mmr-relevance-weight", type=float, default=0.8,
+                        help="MMR relevance weight in [0, 1]; 1.0 preserves RRF order")
     parser.add_argument("--train-ratio", type=float, default=0.6)
     parser.add_argument("--validation-ratio", type=float, default=0.2)
     parser.add_argument("--test-ratio", type=float, default=0.2)
@@ -803,6 +932,8 @@ def parse_args():
         parser.error("--ks must contain positive integers")
     if not 0 <= args.positive_threshold <= 5:
         parser.error("--positive-threshold must be between 0 and 5")
+    if not 0.0 <= args.mmr_relevance_weight <= 1.0:
+        parser.error("--mmr-relevance-weight must be between 0 and 1")
     return args
 
 
