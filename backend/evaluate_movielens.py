@@ -621,7 +621,7 @@ def build_signal_rankings(
         # One latest positive MovieLens rating is treated as one implicit event.
         # Production confidence is 1 + 2 * watch_count, hence 3.0 for one event.
         (np.full(len(rows), 3.0, dtype=np.float32), (rows, cols)),
-        shape=(len(users), len(als_items)),
+        shape=(len(als_users), len(als_items)),
     )
 
     als = None
