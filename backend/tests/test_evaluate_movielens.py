@@ -12,6 +12,7 @@ from evaluate_movielens import (
     intra_list_diversity,
     item_novelty,
     evaluate_diversity_novelty,
+    evaluate_signal_diagnostics,
 )
 
 
@@ -223,3 +224,63 @@ def test_diversity_novelty_evaluation_is_deterministic():
     assert first == second
     assert first["2"]["intra_list_diversity"] > 0
     assert first["2"]["novelty_bits"] > 0
+
+
+
+def test_signal_diagnostics_report_overlap_recall_ablation_and_cf_retention():
+    signals = {
+        "content": {1: [10, 11, 12], 2: [20, 21, 22]},
+        "collaborative": {1: [10, 13, 14], 2: [20, 23, 24]},
+        "explicit_preferences": {1: [11, 12, 15], 2: [21, 22, 25]},
+        "global_popularity": {1: [15, 16, 17], 2: [25, 26, 27]},
+    }
+    relevant = {1: {10, 15}, 2: {20, 25}}
+    result = evaluate_signal_diagnostics(
+        signals,
+        {
+            "content": 1.0,
+            "collaborative": 1.0,
+            "explicit_preferences": 1.25,
+            "popularity": 0.2,
+        },
+        relevant,
+        {10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24, 25, 26, 27},
+        [1, 2],
+        [1, 2],
+        candidate_k=3,
+        bootstrap_seed=9,
+        bootstrap_samples=50,
+    )
+    assert result["candidate_recall"]["collaborative"]["recall"] == 1.0
+    assert result["candidate_recall"]["union"]["recall"] == 1.0
+    assert result["pairwise_candidate_overlap_jaccard"]["content"]["collaborative"] > 0
+    assert "without_each_signal" in result["ablation"]
+    assert set(result["ablation"]["without_each_signal"]) == {
+        "content", "collaborative", "explicit_preferences", "global_popularity"
+    }
+    assert set(result["collaborative_rank_retention"]) == {"1", "2"}
+    assert 0.0 <= result["collaborative_rank_retention"]["2"][
+        "mean_fraction_of_top_cf_candidates_retained_in_hybrid_top_k"
+    ] <= 1.0
+
+
+def test_signal_diagnostics_are_deterministic():
+    signals = {
+        "content": {1: [1, 2]},
+        "collaborative": {1: [2, 1]},
+        "explicit_preferences": {1: [1, 3]},
+        "global_popularity": {1: [3, 2]},
+    }
+    args = (
+        signals,
+        {"content": 1.0, "collaborative": 1.0,
+         "explicit_preferences": 1.0, "popularity": 0.2},
+        {1: {1}}, {1, 2, 3}, [1], [1],
+    )
+    first = evaluate_signal_diagnostics(
+        *args, candidate_k=2, bootstrap_seed=12, bootstrap_samples=50
+    )
+    second = evaluate_signal_diagnostics(
+        *args, candidate_k=2, bootstrap_seed=12, bootstrap_samples=50
+    )
+    assert first == second
