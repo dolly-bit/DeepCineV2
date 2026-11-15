@@ -1702,3 +1702,16 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
  .auth-page .auth-description{font-size:12px}
  .auth-page .auth-bottom{font-size:6px}
 }
+
+
+/* Keep login and signup cards structurally identical */
+.auth-page .auth-form-panel{
+  display:flex;
+  flex-direction:column;
+  min-height:590px;
+}
+.auth-page .auth-form-footer{margin-top:auto}
+@media(max-width:850px){
+  .auth-page .auth-form-panel{min-height:0}
+  .auth-page .auth-form-footer{margin-top:23px}
+}
