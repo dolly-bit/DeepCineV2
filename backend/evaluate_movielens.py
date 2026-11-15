@@ -371,7 +371,7 @@ def evaluate_signal_diagnostics(
             overlap[left][right] = round(float(np.mean(values)), 6) if values else 0.0
 
     candidate_recall = {}
-    all_unique_relevant = set()
+    unique_relevant_contributions = {}
     for name in names:
         values = []
         relevant_pairs = set()
@@ -381,7 +381,18 @@ def evaluate_signal_diagnostics(
             if relevant:
                 values.append(len(candidates & relevant) / len(relevant))
                 relevant_pairs.update((user, item) for item in candidates & relevant)
-        all_unique_relevant.update(relevant_pairs)
+        other_names = [other for other in names if other != name]
+        unique_pairs = set()
+        for user in users:
+            relevant = set(relevant_by_user.get(user, set()))
+            other_candidates = set().union(
+                *(per_user_sets[other][user] for other in other_names)
+            )
+            unique_pairs.update(
+                (user, item)
+                for item in (per_user_sets[name][user] - other_candidates) & relevant
+            )
+        unique_relevant_contributions[name] = len(unique_pairs)
         candidate_recall[name] = {
             "recall": round(float(np.mean(values)), 6) if values else 0.0,
             "recall_ci95": bootstrap_mean_ci(
@@ -460,6 +471,7 @@ def evaluate_signal_diagnostics(
     return {
         "candidate_cutoff": candidate_k,
         "candidate_recall": candidate_recall,
+        "unique_relevant_candidate_contributions": unique_relevant_contributions,
         "pairwise_candidate_overlap_jaccard": overlap,
         "ablation": {
             "full_hybrid_metrics": full_metrics,
