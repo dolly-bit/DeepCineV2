@@ -14,6 +14,7 @@ export default function Landing() {
   useEffect(()=>{let active=true;getTrendingMovies().then(data=>{if(active)setMovies(Array.isArray(data)?data:[])}).catch(err=>console.error("Unable to load trending movies:",err)).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);
   const featured=useMemo(()=>movies.find(m=>backdropOf(m)&&posterOf(m))||movies.find(m=>posterOf(m))||null,[movies]);
   const backdrop=backdropOf(featured)||"https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg";
+  const ambientBackdrop=backdropOf(movies.find(m=>m.id!==featured?.id&&backdropOf(m)))||backdrop;
   const preview=movies.filter(m=>posterOf(m)).slice(0,6);
   async function handleSearch(e){e.preventDefault();const term=query.trim();if(!term||searching)return;setSearching(true);recordSearch(term);try{const results=await searchMovies(term);navigate("/recommend",{state:{search:term,movies:results}})}catch(err){console.error("Movie search failed:",err);navigate("/recommend",{state:{search:term}})}finally{setSearching(false)}}
   return <main className="dc-cinema-landing dc-reference-landing">
@@ -27,9 +28,9 @@ export default function Landing() {
       <div className="dc-cinema-backdrop" style={{backgroundImage:`url("${backdrop}")`}}/><div className="dc-cinema-vignette"/><div className="dc-cinema-grain"/>
       <div className="dc-reference-stage">
         <div className="dc-reference-copy">
-          <div className="dc-cinema-eyebrow"><span/> THE PERSONAL CINEMA EXPERIENCE</div>
+          <div className="dc-cinema-eyebrow"><span/> A BETTER WAY TO FIND YOUR NEXT FILM</div>
           <h1>Stories<br/>for Every<br/><em>Mood.</em></h1>
-          <p className="dc-reference-subtitle">Movies. Series. Stories that stay with you.</p>
+          <p className="dc-reference-subtitle">Films worth finding. Stories worth remembering.</p>
           <div className="dc-reference-perks">
             <div><span><Play size={18}/></span><p><b>Discover your next favourite</b><small>Personalised movie recommendations</small></p></div>
             <div><span><MonitorSmartphone size={18}/></span><p><b>Explore every kind of story</b><small>Browse by genre, mood and taste</small></p></div>
