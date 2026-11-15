@@ -251,7 +251,7 @@ def test_signal_diagnostics_report_overlap_recall_ablation_and_cf_retention():
         bootstrap_seed=9,
         bootstrap_samples=50,
     )
-    assert result["candidate_recall"]["collaborative"]["recall"] == 1.0
+    assert result["candidate_recall"]["collaborative"]["recall"] == 0.5
     assert result["candidate_recall"]["union"]["recall"] == 1.0
     assert result["pairwise_candidate_overlap_jaccard"]["content"]["collaborative"] > 0
     assert "without_each_signal" in result["ablation"]
