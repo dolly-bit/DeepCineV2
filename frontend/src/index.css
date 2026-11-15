@@ -1820,3 +1820,72 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
  .auth-page .auth-submit{min-height:51px}
  .auth-page .auth-bottom{font-size:7px}
 }
+
+
+/* Simple single-page login — aligned with the cinematic black/red landing page */
+.auth-login-simple{
+  --auth-red:#ff4b52;
+  --auth-red-soft:#ff777c;
+  min-height:100svh;
+  display:flex;
+  flex-direction:column;
+  padding:22px clamp(20px,5vw,76px) 16px;
+  color:#f5f5f2;
+  background:
+    radial-gradient(ellipse at 50% 42%,rgba(255,70,78,.085),transparent 42%),
+    linear-gradient(135deg,#05090d 0%,#090d11 58%,#100b0d 100%);
+}
+.auth-login-simple .auth-topbar{width:100%;max-width:1440px;margin:0 auto}
+.auth-login-simple .brand-lockup{gap:10px;color:#f7f7f4;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:19px;font-weight:900;letter-spacing:-.055em}
+.auth-login-simple .brand-lockup>span:last-child{letter-spacing:-.055em}
+.auth-login-simple .brand-lockup>span:last-child span{color:#ff4b52}
+.auth-login-simple .brand-mark{width:39px;height:39px;border:1px solid #ff777c;border-radius:11px;background:linear-gradient(145deg,#ff646b,#b91f2c);color:#fff;box-shadow:0 7px 24px #ff303033}
+.auth-login-simple .auth-back-link{color:#aeb9bd;font-size:11px}
+.auth-login-simple .auth-back-link:hover{color:#ff777c}
+.auth-login-simple .auth-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  place-items:center;
+  width:100%;
+  max-width:1440px;
+  min-height:0;
+  flex:1;
+  margin:0 auto;
+  padding:36px 16px;
+}
+.auth-login-simple .auth-form-panel{
+  width:min(440px,100%);
+  min-height:0;
+  margin:0;
+  padding:clamp(27px,4vw,39px);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:17px;
+  background:linear-gradient(145deg,rgba(17,22,26,.98),rgba(7,11,15,.99));
+  box-shadow:0 30px 90px #0009,inset 0 1px #ffffff0b;
+}
+.auth-login-simple .auth-step{color:#ff8589;font-size:9px;letter-spacing:.17em}
+.auth-login-simple .auth-form-heading h2{margin:15px 0 8px;color:#f5f5f2;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(27px,4vw,34px);font-weight:850;line-height:1.12;letter-spacing:-.05em}
+.auth-login-simple .auth-form-heading p{color:#9eafb4;font-size:12px;line-height:1.7}
+.auth-login-simple .auth-form{display:grid;gap:14px;margin-top:25px}
+.auth-login-simple .auth-label{color:#e2e8e8;font-size:11px;font-weight:750;letter-spacing:0}
+.auth-login-simple .auth-input-wrap{min-height:51px;border-color:#ffffff20;border-radius:8px;background:#070c10;color:#91a0a4}
+.auth-login-simple .auth-input-wrap:focus-within{border-color:#ff4b52;box-shadow:0 0 0 3px #ff4b521b}
+.auth-login-simple .auth-input-wrap input{color:#f4f6f5;font-size:13px}
+.auth-login-simple .auth-input-wrap input::placeholder{color:#718187}
+.auth-login-simple .auth-icon-button{color:#91a0a4}
+.auth-login-simple .auth-icon-button:hover{color:#ff777c}
+.auth-login-simple .auth-submit{display:flex;align-items:center;justify-content:center;gap:12px;min-height:51px;margin-top:3px;border:1px solid #ff4b52;border-radius:8px;background:linear-gradient(110deg,#ff5b61,#e82f3b);color:#fff;font-size:12px;font-weight:850;box-shadow:0 8px 22px #e72e3b29}
+.auth-login-simple .auth-submit:hover:not(:disabled){background:linear-gradient(110deg,#ff7479,#f0444c)}
+.auth-login-simple .auth-form-footer{margin-top:22px;padding-top:18px;border-top:1px solid #ffffff1a;color:#a5b0b3;font-size:11px;text-align:center}
+.auth-login-simple .auth-form-footer a{color:#ff777c}
+.auth-login-simple .auth-legal{margin:16px 0 0;color:#728187;font-size:9px;line-height:1.6;text-align:center}
+.auth-login-simple .auth-bottom{width:100%;max-width:1440px;margin:0 auto}
+@media(max-width:520px){
+ .auth-login-simple{padding:16px 16px 12px}
+ .auth-login-simple .brand-lockup{font-size:16px}
+ .auth-login-simple .brand-mark{width:34px;height:34px}
+ .auth-login-simple .auth-back-link{font-size:9px}
+ .auth-login-simple .auth-layout{padding:24px 0}
+ .auth-login-simple .auth-form-panel{padding:25px 20px}
+ .auth-login-simple .auth-bottom{font-size:7px}
+}
