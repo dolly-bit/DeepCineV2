@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, BookmarkPlus, Clapperboard, Download, Film, MonitorSmartphone, Play, Search, Sparkles, Star, Users, WandSparkles } from "lucide-react";
-import TrendingMarquee from "../components/home/TrendingMarquee";
 import { getTrendingMovies, recordSearch, searchMovies } from "../services/movies";
 import "./Landing.css";
 
@@ -9,9 +8,9 @@ const posterOf = (m) => m?.poster_url || (m?.poster_path ? `https://image.tmdb.o
 const backdropOf = (m) => m?.backdrop_url || (m?.backdrop_path ? `https://image.tmdb.org/t/p/original${m.backdrop_path}` : "");
 
 export default function Landing() {
-  const [movies,setMovies]=useState([]),[loading,setLoading]=useState(true),[query,setQuery]=useState(""),[searching,setSearching]=useState(false);
+  const [movies,setMovies]=useState([]),[query,setQuery]=useState(""),[searching,setSearching]=useState(false);
   const navigate=useNavigate();
-  useEffect(()=>{let active=true;getTrendingMovies().then(data=>{if(active)setMovies(Array.isArray(data)?data:[])}).catch(err=>console.error("Unable to load trending movies:",err)).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);
+  useEffect(()=>{let active=true;getTrendingMovies().then(data=>{if(active)setMovies(Array.isArray(data)?data:[])}).catch(err=>console.error("Unable to load trending movies:",err));return()=>{active=false}},[]);
   const featured=useMemo(()=>movies.find(m=>backdropOf(m)&&posterOf(m))||movies.find(m=>posterOf(m))||null,[movies]);
   const backdrop=backdropOf(featured)||"https://image.tmdb.org/t/p/original/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg";
   const ambientBackdrop=backdropOf(movies.find(m=>m.id!==featured?.id&&backdropOf(m)))||backdrop;
@@ -20,7 +19,7 @@ export default function Landing() {
   return <main className="dc-cinema-landing dc-reference-landing">
     <header className="dc-cinema-header">
       <Link to="/" className="dc-cinema-brand"><span className="dc-brand-mark"><Clapperboard size={19}/></span><span>Deep<span>Cine</span></span></Link>
-      <nav className="dc-cinema-nav"><a href="#discover">Discover</a><a href="#how-it-works">Features</a><a href="#trending">Trending</a></nav>
+      
       <div className="dc-cinema-account"><Link to="/login" className="dc-cinema-signin">Sign in</Link><Link to="/signup" className="dc-cinema-join">Start discovering <ArrowRight size={14}/></Link></div>
     </header>
 
@@ -91,9 +90,5 @@ export default function Landing() {
         <div className="dc-ribbon-action"><Link to="/signup">Start discovering <ArrowRight size={14}/></Link></div>
       </div>
     </section>
-
-    <div className="dc-cinema-trending" id="trending"><div className="dc-cinema-section-intro"><div><span>THE CINEMA NEVER STOPS</span><h2>Stories worth discovering<span>.</span></h2></div><Link to="/discover">Explore the collection <ArrowRight size={15}/></Link></div><TrendingMarquee movies={movies} loading={loading}/></div>
-    <section className="dc-cinema-bottom-cta"><div><span>YOUR NEXT FAVOURITE IS OUT THERE</span><h2>Let your next story find you.</h2><p>Build your taste profile and make movie night easier.</p></div><Link to="/signup">Start discovering <ArrowRight size={16}/></Link></section>
-    <footer className="dc-cinema-footer"><Link to="/" className="dc-cinema-brand"><span className="dc-brand-mark"><Clapperboard size={16}/></span><span>Deep<span>Cine</span></span></Link><span>DISCOVER BETTER. WATCH HAPPIER.</span><small>© {new Date().getFullYear()} DeepCine</small></footer>
   </main>;
 }
