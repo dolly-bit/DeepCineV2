@@ -316,6 +316,165 @@ def evaluate_diversity_novelty(
     return output
 
 
+def _fuse_signal_subset(signal_rankings, weights, top_k, users, excluded=()):
+    """Fuse production signals while allowing controlled one-signal ablations."""
+    rankings = {}
+    for user in users:
+        candidates = {
+            "content": signal_rankings["content"].get(user, []),
+            "collaborative": signal_rankings["collaborative"].get(user, []),
+            "explicit_preferences": signal_rankings["explicit_preferences"].get(user, []),
+            "popularity": signal_rankings["global_popularity"].get(user, []),
+        }
+        selected = {
+            name: values for name, values in candidates.items()
+            if name not in excluded
+        }
+        selected_weights = {
+            name: weight for name, weight in weights.items()
+            if name not in excluded
+        }
+        rankings[user] = reciprocal_rank_fusion(
+            selected, weights=selected_weights, top_k=top_k
+        )
+    return rankings
+
+
+def evaluate_signal_diagnostics(
+    signal_rankings, weights, relevant_by_user, candidate_catalog, ks,
+    users, candidate_k=100, bootstrap_seed=42, bootstrap_samples=1000,
+):
+    """Measure candidate overlap, candidate recall, ablations and CF retention.
+
+    This is diagnostic reporting only: it does not tune weights or select a
+    production configuration. Validation diagnostics inform decisions; test
+    diagnostics are descriptive and must not be used to retune the system.
+    """
+    names = ("content", "collaborative", "explicit_preferences", "global_popularity")
+    per_user_sets = {
+        name: {
+            user: set(signal_rankings[name].get(user, [])[:candidate_k])
+            for user in users
+        }
+        for name in names
+    }
+
+    overlap = {}
+    for left in names:
+        overlap[left] = {}
+        for right in names:
+            values = []
+            for user in users:
+                a, b = per_user_sets[left][user], per_user_sets[right][user]
+                union = a | b
+                values.append(len(a & b) / len(union) if union else 0.0)
+            overlap[left][right] = round(float(np.mean(values)), 6) if values else 0.0
+
+    candidate_recall = {}
+    all_unique_relevant = set()
+    for name in names:
+        values = []
+        relevant_pairs = set()
+        for user in users:
+            relevant = set(relevant_by_user.get(user, set()))
+            candidates = per_user_sets[name][user]
+            if relevant:
+                values.append(len(candidates & relevant) / len(relevant))
+                relevant_pairs.update((user, item) for item in candidates & relevant)
+        all_unique_relevant.update(relevant_pairs)
+        candidate_recall[name] = {
+            "recall": round(float(np.mean(values)), 6) if values else 0.0,
+            "recall_ci95": bootstrap_mean_ci(
+                values, seed=bootstrap_seed + 10 + names.index(name),
+                samples=bootstrap_samples,
+            ),
+            "relevant_candidates_retrieved": len(relevant_pairs),
+        }
+
+    union_values = []
+    for user in users:
+        relevant = set(relevant_by_user.get(user, set()))
+        union = set().union(*(per_user_sets[name][user] for name in names))
+        if relevant:
+            union_values.append(len(union & relevant) / len(relevant))
+    candidate_recall["union"] = {
+        "recall": round(float(np.mean(union_values)), 6) if union_values else 0.0,
+        "recall_ci95": bootstrap_mean_ci(
+            union_values, seed=bootstrap_seed + 20, samples=bootstrap_samples
+        ),
+    }
+
+    full = _fuse_signal_subset(
+        signal_rankings, weights, max(ks) * 10, users
+    )
+    full_metrics = evaluate_rankings(
+        full, relevant_by_user, candidate_catalog, ks,
+        bootstrap_seed=bootstrap_seed, bootstrap_samples=bootstrap_samples,
+    )
+    ablations = {}
+    for name in names:
+        omitted = "popularity" if name == "global_popularity" else name
+        ablated = _fuse_signal_subset(
+            signal_rankings, weights, max(ks) * 10, users, excluded={omitted}
+        )
+        ablated_metrics = evaluate_rankings(
+            ablated, relevant_by_user, candidate_catalog, ks,
+            bootstrap_seed=bootstrap_seed + 30 + names.index(name),
+            bootstrap_samples=bootstrap_samples,
+        )
+        comparisons = {}
+        for k in ks:
+            full_user = per_user_ranking_metrics(full, relevant_by_user, k)
+            ablated_user = per_user_ranking_metrics(ablated, relevant_by_user, k)
+            comparisons[str(k)] = {
+                metric: paired_bootstrap_difference_ci(
+                    full_user, ablated_user, metric,
+                    seed=bootstrap_seed + 100 + k + names.index(name) * 10 + offset,
+                    samples=bootstrap_samples,
+                )
+                for offset, metric in enumerate(("precision", "recall", "ndcg"))
+            }
+        ablations[name] = {
+            "metrics_without_signal": ablated_metrics,
+            "paired_full_minus_ablated_ci95": comparisons,
+        }
+
+    retention = {}
+    for k in ks:
+        per_user = []
+        for user in users:
+            cf = signal_rankings["collaborative"].get(user, [])[:k]
+            final = set(full.get(user, [])[:k])
+            if cf:
+                per_user.append(len(set(cf) & final) / len(set(cf)))
+        retention[str(k)] = {
+            "mean_fraction_of_top_cf_candidates_retained_in_hybrid_top_k":
+                round(float(np.mean(per_user)), 6) if per_user else 0.0,
+            "ci95": bootstrap_mean_ci(
+                per_user, seed=bootstrap_seed + 200 + k,
+                samples=bootstrap_samples,
+            ),
+            "users_evaluated": len(per_user),
+        }
+
+    return {
+        "candidate_cutoff": candidate_k,
+        "candidate_recall": candidate_recall,
+        "pairwise_candidate_overlap_jaccard": overlap,
+        "ablation": {
+            "full_hybrid_metrics": full_metrics,
+            "without_each_signal": ablations,
+        },
+        "collaborative_rank_retention": retention,
+        "interpretation": (
+            "Ablation differences are full hybrid minus the ablated model. "
+            "Positive values favor the full hybrid. Candidate recall measures "
+            "retrieval before fusion. CF retention measures the fraction of "
+            "top-K CF candidates that remain in the final hybrid top-K."
+        ),
+    }
+
+
 def _normalize_rows(matrix):
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     return matrix / np.maximum(norms, 1e-12)
@@ -378,9 +537,24 @@ def build_signal_rankings(
     train = {u: items for u, items in train.items() if items}
 
     item_counts = Counter(item for items in train.values() for item in items)
+    # Match production's global fallback: TMDB popularity, then vote average.
     global_popularity_order = sorted(
         catalog_ids,
-        key=lambda item: (item_counts[item], float(movies[item].popularity or 0), item),
+        key=lambda item: (
+            float(movies[item].popularity or 0),
+            float(movies[item].vote_average or 0),
+            item,
+        ),
+        reverse=True,
+    )
+    # Keep the train-interaction popularity baseline separate for diagnostics.
+    training_popularity_order = sorted(
+        catalog_ids,
+        key=lambda item: (
+            item_counts[item],
+            float(movies[item].popularity or 0),
+            item,
+        ),
         reverse=True,
     )
 
@@ -410,7 +584,9 @@ def build_signal_rankings(
             rows.append(user_pos[user])
             cols.append(als_item_pos[item])
     matrix = csr_matrix(
-        (np.ones(len(rows), dtype=np.float32), (rows, cols)),
+        # One latest positive MovieLens rating is treated as one implicit event.
+        # Production confidence is 1 + 2 * watch_count, hence 3.0 for one event.
+        (np.full(len(rows), 3.0, dtype=np.float32), (rows, cols)),
         shape=(len(users), len(als_items)),
     )
 
@@ -432,8 +608,9 @@ def build_signal_rankings(
         genres_by_item[int(tmdb_id)].add(genre_id)
 
     signal_names = (
-        "global_popularity", "personalized_popularity", "content",
-        "cosine_profile_content", "collaborative", "explicit_preferences",
+        "global_popularity", "training_popularity", "personalized_popularity",
+        "content", "cosine_profile_content", "collaborative",
+        "explicit_preferences",
     )
     signals = {name: {} for name in signal_names}
     candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
@@ -444,6 +621,7 @@ def build_signal_rankings(
         watched = train[user]
         unseen = catalog_ids - watched
         global_pop = [i for i in global_popularity_order if i in unseen][:candidate_limit]
+        training_pop = [i for i in training_popularity_order if i in unseen][:candidate_limit]
 
         # Personalized popularity: training interaction popularity, boosted
         # by overlap with this user's training-derived genre profile.
@@ -503,6 +681,7 @@ def build_signal_rankings(
             reverse=True,
         )
         signals["global_popularity"][user] = global_pop
+        signals["training_popularity"][user] = training_pop
         signals["personalized_popularity"][user] = personalized_pop
         signals["content"][user] = content
         signals["cosine_profile_content"][user] = cosine_profile
@@ -659,6 +838,7 @@ def run(args):
         total_train_interactions = sum(train_item_counts.values())
         all_rankings = {
             "global_popularity": signals["global_popularity"],
+            "training_popularity": signals["training_popularity"],
             "personalized_popularity": signals["personalized_popularity"],
             "content": signals["content"],
             "cosine_profile_content": signals["cosine_profile_content"],
@@ -694,6 +874,22 @@ def run(args):
                 bootstrap_samples=args.bootstrap_samples,
             )
             for name, rankings in test_rankings.items()
+        }
+        # Run diagnostics with frozen validation-selected weights. Test diagnostics
+        # are descriptive only and must never be used to retune these weights.
+        signal_diagnostics = {
+            "validation": evaluate_signal_diagnostics(
+                signals, tuning["weights"], validation_sample, overlap_ids,
+                args.ks, validation_users, candidate_k=100,
+                bootstrap_seed=args.bootstrap_seed + 700,
+                bootstrap_samples=args.bootstrap_samples,
+            ),
+            "test": evaluate_signal_diagnostics(
+                signals, tuning["weights"], test_sample, overlap_ids,
+                args.ks, test_users, candidate_k=100,
+                bootstrap_seed=args.bootstrap_seed + 800,
+                bootstrap_samples=args.bootstrap_samples,
+            ),
         }
         diversity_novelty_metrics = {
             "validation": {
@@ -825,6 +1021,7 @@ def run(args):
             },
             "validation_metrics": validation_metrics,
             "test_metrics": test_metrics,
+            "signal_diagnostics": signal_diagnostics,
             "diversity_novelty_metrics": diversity_novelty_metrics,
             "paired_test_difference_hybrid_minus_global_popularity_ci95": paired_comparisons,
             "paired_test_difference_mmr_minus_rrf_ci95": paired_mmr_comparisons,
@@ -835,7 +1032,10 @@ def run(args):
                 "Per-user chronological splitting is not a global calendar-time split.",
                 "Offline explicit-preference ranking approximates production genre affinity using training-positive interactions and catalog popularity/vote-average tie-breaks; it does not simulate explicit ratings or watchlist feedback.",
                 "Production RRF weights are evaluated separately from validation-tuned weights; MovieLens positives are only an implicit-feedback approximation of production watch history.",
-                "The final test partition must not be used to select weights or model settings.",
+                "The final test partition must not be used to select weights or model settings; test signal diagnostics are descriptive only.",
+                "MovieLens has one latest positive rating per user/movie pair in this protocol; it is treated as one implicit event with confidence 3.0 to match production's 1 + 2 * watch_count formula for one event. It cannot reproduce repeated-watch counts.",
+                "The benchmark's explicit-preference signal approximates production using training-positive genres and does not reproduce ratings or watchlist feedback.",
+                "The training-interaction popularity baseline is reported separately; the hybrid popularity signal mirrors production's TMDB popularity and vote-average ordering.",
                 "Bootstrap intervals quantify uncertainty across sampled users for this run; repeated seeds are still required to assess run-to-run stability.",
                 "Validation and test metrics use independently seeded user cohorts; overlap is possible but their samples are not intentionally coupled.",
                 "Metrics are estimated on seeded uniform samples of eligible users, not the full eligible population.",
