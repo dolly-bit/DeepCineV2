@@ -1633,3 +1633,72 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
  .dc-landing-page .dc-trending-item { flex-basis:116px; width:116px; }
  .dc-landing-topbar { padding:0 16px; }
 }
+
+
+/* Auth pages: match the DeepCine cinematic black / red landing identity */
+.auth-page{
+  --auth-red:#ff4b52;
+  --auth-red-soft:#ff777c;
+  min-height:100svh;
+  padding:22px clamp(18px,4.5vw,68px) 18px;
+  color:#f5f5f2;
+  background:
+    radial-gradient(ellipse at 12% 48%,rgba(255,65,75,.11),transparent 36%),
+    radial-gradient(ellipse at 88% 10%,rgba(145,38,43,.13),transparent 32%),
+    linear-gradient(135deg,#05090d 0%,#090d11 54%,#100b0d 100%);
+}
+.auth-page .auth-grain{opacity:.12}
+.auth-page .brand-lockup{gap:10px;color:#f6f6f3;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:20px;font-weight:900;letter-spacing:-.055em}
+.auth-page .brand-lockup>span:last-child{letter-spacing:-.055em}
+.auth-page .brand-lockup>span:last-child span{color:var(--auth-red)}
+.auth-page .brand-mark{width:36px;height:36px;border:1px solid #ff777c;border-radius:10px;background:linear-gradient(145deg,#ff646b,#b91f2c);color:white;box-shadow:0 7px 24px #ff303033}
+.auth-page .auth-back-link{color:#aeb9bd;font-size:11px}
+.auth-page .auth-back-link:hover{color:var(--auth-red-soft)}
+.auth-page .auth-layout{width:min(1320px,100%);min-height:calc(100svh - 112px);grid-template-columns:minmax(0,1.08fr) minmax(390px,.82fr);gap:clamp(34px,7vw,100px);margin:10px auto 8px}
+.auth-page .auth-story{padding:22px 0 28px}
+.auth-page .auth-kicker{border-color:#ff5b633b;background:#ff4b520d;color:#ff8589}
+.auth-page .auth-overline{margin-top:34px;color:#aab5b8}
+.auth-page .auth-story h1{max-width:690px;margin:12px 0 15px;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(48px,6.2vw,82px);font-weight:900;line-height:.96;letter-spacing:-.075em;color:#f6f6f3}
+.auth-page .auth-story h1 em{color:var(--auth-red);font-weight:900;font-style:italic}
+.auth-page .auth-description{max-width:500px;color:#b2bec1;font-size:14px;line-height:1.75}
+.auth-page .poster-orbit{margin-top:27px}
+.auth-page .orbit-poster{border-color:#ffffff2b;border-radius:8px;box-shadow:0 20px 48px #000b}
+.auth-page .orbit-center{border-color:#ff6b713f;background:linear-gradient(145deg,#171014f5,#0b1115f5);color:#ff777c}
+.auth-page .auth-live-dot{background:var(--auth-red);box-shadow:0 0 12px #ff4b52aa}
+.auth-page .auth-story-foot{color:#a3b0b3}
+.auth-page .auth-form-panel{padding:clamp(25px,3.2vw,42px);border:1px solid rgba(255,255,255,.13);border-radius:16px;background:linear-gradient(145deg,rgba(16,21,25,.97),rgba(7,11,15,.98));box-shadow:0 35px 100px #0009,inset 0 1px #ffffff0b}
+.auth-page .auth-step{color:#ff8589;letter-spacing:.16em}
+.auth-page .auth-form-heading h2{margin:15px 0 9px;color:#f5f5f2;font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(26px,2.6vw,36px);font-weight:850;letter-spacing:-.055em}
+.auth-page .auth-form-heading p{color:#9eafb4;font-size:12px;line-height:1.7}
+.auth-page .auth-form{gap:12px;margin-top:24px}
+.auth-page .auth-label{color:#e2e8e8;font-size:11px;letter-spacing:0}
+.auth-page .auth-input-wrap{min-height:51px;border-color:#ffffff20;border-radius:8px;background:#070c10;color:#8b9ba0}
+.auth-page .auth-input-wrap:focus-within{border-color:var(--auth-red);box-shadow:0 0 0 3px #ff4b521b}
+.auth-page .auth-input-wrap input{color:#f4f6f5}
+.auth-page .auth-input-wrap input::placeholder{color:#718187}
+.auth-page .auth-icon-button{color:#91a0a4}
+.auth-page .auth-icon-button:hover{color:var(--auth-red-soft)}
+.auth-page .auth-submit{min-height:51px;border-color:var(--auth-red);border-radius:8px;background:linear-gradient(110deg,#ff5b61,#e82f3b);color:#fff;font-size:12px;font-weight:850;box-shadow:0 8px 22px #e72e3b29}
+.auth-page .auth-submit:hover:not(:disabled){background:linear-gradient(110deg,#ff7479,#f0444c)}
+.auth-page .auth-error{border-color:#ff66664d;background:#8d222226;color:#ffb8b6}
+.auth-page .auth-form-footer{border-color:#ffffff1a;color:#a5b0b3}
+.auth-page .auth-form-footer a{color:#ff777c}
+.auth-page .auth-legal{color:#728187}
+.auth-page .auth-bottom{border-color:#ffffff17;color:#77858a}
+@media(max-width:850px){
+ .auth-page .auth-layout{grid-template-columns:1fr;gap:24px;max-width:580px;padding:24px 0}
+ .auth-page .auth-story{padding:8px 0 0}
+ .auth-page .auth-overline{margin-top:25px}
+ .auth-page .auth-story h1{font-size:clamp(46px,10vw,68px)}
+ .auth-page .poster-orbit{transform:scale(.82);transform-origin:left center;margin-bottom:-28px}
+ .auth-page .auth-form-panel{padding:27px 23px}
+}
+@media(max-width:520px){
+ .auth-page{padding:17px 16px 14px}
+ .auth-page .brand-lockup{font-size:17px}
+ .auth-page .auth-back-link{font-size:9px}
+ .auth-page .poster-orbit{transform:scale(.66);margin-bottom:-58px}
+ .auth-page .auth-story h1{font-size:48px}
+ .auth-page .auth-description{font-size:12px}
+ .auth-page .auth-bottom{font-size:6px}
+}
