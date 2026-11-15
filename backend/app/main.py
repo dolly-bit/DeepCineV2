@@ -1,7 +1,8 @@
 import asyncio
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.connection import Base, engine
@@ -84,4 +85,19 @@ def root():
 
 @app.get("/health")
 def health():
+    """Readiness probe: verify the API process can reach its database."""
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.exception("Readiness check failed: database unavailable")
+        raise HTTPException(
+            status_code=503, detail="database unavailable"
+        ) from exc
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+def liveness():
+    """Liveness probe: confirm the application process is responsive."""
+    return {"status": "alive"}
