@@ -13,6 +13,7 @@ from evaluate_movielens import (
     item_novelty,
     evaluate_diversity_novelty,
     evaluate_signal_diagnostics,
+    eligible_als_training_population,
 )
 
 
@@ -284,3 +285,30 @@ def test_signal_diagnostics_are_deterministic():
         *args, candidate_k=2, bootstrap_seed=12, bootstrap_samples=50
     )
     assert first == second
+
+
+
+def test_als_training_population_matches_production_minimum_gates():
+    train = {
+        1: {10, 11, 12},
+        2: {10, 11, 12},
+        3: {10, 11, 12},
+        4: {10, 11, 12},
+        5: {10, 11, 12},
+        6: {10, 11},
+        7: {10},
+    }
+    eligible = eligible_als_training_population(train)
+    assert set(eligible) == {1, 2, 3, 4, 5}
+    assert eligible[1] == {10, 11, 12}
+
+
+def test_als_training_population_disables_collaborative_signal_below_user_gate():
+    train = {1: {10, 11, 12}, 2: {10, 11, 12}, 3: {10, 11, 12}, 4: {10, 11, 12}}
+    assert eligible_als_training_population(train) == {}
+
+
+def test_als_training_population_rejects_invalid_thresholds():
+    import pytest
+    with pytest.raises(ValueError):
+        eligible_als_training_population({1: {10}}, min_users=0)
