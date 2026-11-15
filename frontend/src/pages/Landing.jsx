@@ -24,7 +24,7 @@ export default function Landing() {
     </header>
 
     <section className="dc-cinema-hero dc-reference-hero" id="discover">
-      <div className="dc-cinema-backdrop" style={{backgroundImage:`url("${backdrop}")`}}/><div className="dc-cinema-vignette"/><div className="dc-cinema-grain"/>
+      <div className="dc-cinema-backdrop" style={{backgroundImage:`url("${ambientBackdrop}")`}}/><div className="dc-cinema-vignette"/><div className="dc-cinema-grain"/>
       <div className="dc-reference-stage">
         <div className="dc-reference-copy">
           <div className="dc-cinema-eyebrow"><span/> A BETTER WAY TO FIND YOUR NEXT FILM</div>
