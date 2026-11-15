@@ -262,7 +262,7 @@ When reporting results, include the dataset/catalog snapshot, split protocol, ca
 
 ## Portfolio walkthrough
 
-Use [PORTFOLIO_DEMO.md](./PORTFOLIO_DEMO.md) for a repeatable demonstration checklist, validation steps, and evidence to capture. Do not claim a workflow, deployment, benchmark, or quality check passed unless it has been run and verified in the target environment.
+Use [PORTFOLIO_DEMO.md](./PORTFOLIO_DEMO.md) for a repeatable demonstration checklist, validation steps, and evidence to capture. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the Vercel/API deployment runbook. Do not claim a workflow, deployment, benchmark, or quality check passed unless it has been run and verified in the target environment.
 
 ## Attribution
 
