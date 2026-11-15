@@ -1,5 +1,6 @@
 import "./index.css";
 import "./redesign.css";
+import "./theme.css";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
