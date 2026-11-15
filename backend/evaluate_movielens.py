@@ -492,6 +492,24 @@ def _normalize_rows(matrix):
     return matrix / np.maximum(norms, 1e-12)
 
 
+def eligible_als_training_population(
+    train, min_users=5, min_interactions_per_user=3
+):
+    """Mirror production ALS eligibility gates using training interactions only.
+
+    Users outside the ALS cohort can still receive content, genre, and
+    popularity rankings; their collaborative candidate list is empty.
+    """
+    if min_users < 1 or min_interactions_per_user < 1:
+        raise ValueError("ALS eligibility thresholds must be positive")
+    eligible = {
+        user: set(items)
+        for user, items in train.items()
+        if len(set(items)) >= min_interactions_per_user
+    }
+    return eligible if len(eligible) >= min_users else {}
+
+
 def select_ranking_users(train, ranking_users=None):
     """Select users to score without changing the training population."""
     users = sorted(train) if ranking_users is None else sorted(set(ranking_users))
@@ -586,12 +604,16 @@ def build_signal_rankings(
     cosine_embeddings = _normalize_rows(embeddings)
     item_pos = {item: idx for idx, item in enumerate(ordered_ids)}
 
-    users = sorted(train)
-    als_items = sorted(set().union(*train.values())) if users else []
-    user_pos = {user: idx for idx, user in enumerate(users)}
+    # Production ALS trains only when >=5 users each have >=3 distinct
+    # watched movies. Apply the same gate to the training partition, not
+    # validation/test interactions.
+    als_train = eligible_als_training_population(train)
+    als_users = sorted(als_train)
+    als_items = sorted(set().union(*als_train.values())) if als_users else []
+    user_pos = {user: idx for idx, user in enumerate(als_users)}
     als_item_pos = {item: idx for idx, item in enumerate(als_items)}
     rows, cols = [], []
-    for user, items in train.items():
+    for user, items in als_train.items():
         for item in items:
             rows.append(user_pos[user])
             cols.append(als_item_pos[item])
@@ -603,7 +625,7 @@ def build_signal_rankings(
     )
 
     als = None
-    if len(users) >= 2 and len(als_items) >= 2 and matrix.nnz:
+    if len(als_users) >= 5 and len(als_items) >= 2 and matrix.nnz:
         als = AlternatingLeastSquares(
             factors=als_factors, regularization=0.05, iterations=als_iterations,
             random_state=seed, num_threads=1,
