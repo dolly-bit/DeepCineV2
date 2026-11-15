@@ -1030,6 +1030,16 @@ def run(args):
                 "blas_thread_limit": 1,
             },
             "hybrid_tuning": tuning,
+            "als_training_population": {
+                "eligible_users": len(eligible_als_training_population(train)),
+                "minimum_users": 5,
+                "minimum_distinct_training_interactions_per_user": 3,
+                "training_interactions_used": sum(
+                    len(items)
+                    for items in eligible_als_training_population(train).values()
+                ),
+                "users_without_als_factors_receive_empty_collaborative_rankings": True,
+            },
             "evaluation": {
                 "metrics": [
                     "precision", "recall", "ndcg", "coverage",
