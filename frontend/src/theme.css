@@ -203,3 +203,68 @@ input.bg-zinc-900, .bg-zinc-900{
 .dc-library-tabs button.active span{background:rgba(255,75,82,.13) !important;color:#ff8589 !important}
 .dc-library-empty-state svg,.dc-library-heading .dc-slider-eyebrow{color:#ff8589 !important}
 .dc-profile-page .dc-profile-detail-icon{color:#ff8589 !important}
+
+
+/* Final pass: remove remaining teal/cyan styling from Explore, AI Picks and account avatar. */
+.dc-user-avatar{
+  border:1px solid rgba(255,75,82,.48) !important;
+  background:linear-gradient(145deg,#ff646b,#a91f2b) !important;
+  color:#fff !important;
+  box-shadow:0 5px 18px rgba(255,65,75,.16) !important;
+}
+.dc-topbar-user small{color:#ff999d !important}
+.dc-topbar-user:hover .dc-user-avatar{background:linear-gradient(145deg,#ff777d,#c92735) !important}
+.dc-discover-intro,.dc-ai-intro{
+  border-color:rgba(255,75,82,.25) !important;
+  background:radial-gradient(ellipse at 82% 10%,rgba(255,75,82,.13),transparent 42%),linear-gradient(115deg,#211216,#111317 65%,#191014) !important;
+}
+.dc-discover-intro:after{border-color:rgba(255,100,107,.1) !important;box-shadow:0 0 0 28px rgba(255,100,107,.035),0 0 0 58px rgba(255,100,107,.02) !important}
+.dc-discover-kicker,.dc-discover-step,.dc-discover-stamp{color:#ff8589 !important}
+.dc-discover-intro h1,.dc-ai-intro h1{color:#f4f4f1 !important}
+.dc-discover-intro h1 em,.dc-ai-intro h1 em{color:#ff8589 !important}
+.dc-discover-intro p,.dc-ai-intro p{color:#a5a9ad !important}
+.dc-discover-builder{
+  border-color:rgba(255,255,255,.12) !important;
+  background:linear-gradient(145deg,#15191e,#0d1115) !important;
+}
+.dc-discover-builder h2,.dc-discover-results h2,.dc-ai-page h2{color:#f1f0e9 !important}
+.dc-discover-builder p,.dc-discover-results p{color:#9ba5aa !important}
+.dc-mood-choice,.dc-genre-chip,.dc-preference-control,.dc-selection-summary{
+  border-color:rgba(255,255,255,.13) !important;
+  background:rgba(255,255,255,.025) !important;
+  color:#d9dcdd !important;
+}
+.dc-mood-choice:hover,.dc-genre-chip:hover,.dc-mood-choice.chosen,.dc-genre-chip.selected{
+  border-color:rgba(255,75,82,.55) !important;
+  background:rgba(255,75,82,.1) !important;
+  color:#ffb0b3 !important;
+}
+.dc-mood-icon,.dc-mood-choice .dc-mood-check,.dc-genre-chip>span{color:#ff8589 !important}
+.dc-mood-choice[class*="tone-"] .dc-mood-icon{color:#ff8589 !important}
+.dc-mood-choice[class*="tone-"].chosen .dc-mood-icon{color:#ffb0b3 !important}
+.dc-preference-control select,.dc-discover-page select{
+  border-color:rgba(255,255,255,.15) !important;
+  background:#090b0e !important;color:#f4f4f1 !important;
+}
+.dc-discover-empty>span{border-color:rgba(255,75,82,.35) !important;background:rgba(255,75,82,.1) !important;color:#ff8589 !important}
+.dc-discover-empty button,.dc-discover-more button,.dc-ai-search-button,.dc-ai-shortcuts button,.dc-send-to-ai{
+  border:1px solid rgba(255,75,82,.4) !important;
+  background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;
+  color:#fff !important;
+}
+.dc-discover-more button:hover,.dc-discover-empty button:hover,.dc-ai-search-button:hover,.dc-ai-shortcuts button:hover,.dc-send-to-ai:hover{
+  border-color:#ff8589 !important;
+  background:linear-gradient(110deg,#ff7479,#f0444c) !important;
+  color:#fff !important;
+}
+.dc-ai-context{border-color:rgba(255,255,255,.14) !important;background:rgba(255,255,255,.04) !important;color:#c1c5c8 !important}
+.dc-ai-fallback,.dc-ai-page .dc-recommendation-empty{
+  border-color:rgba(255,255,255,.12) !important;
+  background:linear-gradient(145deg,#15191e,#0d1115) !important;
+}
+.dc-ai-page .dc-slider-eyebrow{color:#ff8589 !important}
+.dc-ai-page .dc-slider-heading h2{color:#f4f4f1 !important}
+.dc-ai-footer{color:#858d93 !important}
+.dc-discover-page .dc-builder-divider{background:rgba(255,255,255,.1) !important}
+.dc-discover-page .dc-results-sort{color:#ff999d !important}
+.dc-discover-page .dc-movie-poster{border-color:rgba(255,255,255,.13) !important}
