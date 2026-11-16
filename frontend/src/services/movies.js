@@ -221,8 +221,13 @@ export const removeFromWatchlist = async (tmdbId) => {
 export const getCoWatchRecommendations = async (userId, options = {}) => {
   if (!userId) return [];
   const { topK = 20, minSharedUsers = 1 } = options;
-  const response = await api.get(`/recommend/co-watch/${userId}`, {
-    params: { top_k: topK, min_shared_users: minSharedUsers },
-  });
-  return (response.data || []).map(normalizeMovie);
+  try {
+    const response = await api.get(`/recommend/co-watch/${userId}`, {
+      params: { top_k: topK, min_shared_users: minSharedUsers },
+    });
+    return (response.data || []).map(normalizeMovie);
+  } catch (err) {
+    console.error("Co-view recommendation error:", err);
+    return [];
+  }
 };
