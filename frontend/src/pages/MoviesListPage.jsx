@@ -8,7 +8,6 @@ import { discoverMovies,getPersonalizedRecommendations,getCollaborativeRecommend
 export default function MoviesListPage(){
   const location=useLocation();
   const [mode,setMode]=useState(location.state?.mode||"trending");
-  useEffect(()=>{ if(location.state?.mode) setMode(location.state.mode); },[location.key,location.state?.mode]);
   const [movies,setMovies]=useState([]),[page,setPage]=useState(0),[loading,setLoading]=useState(true),[loadingMore,setLoadingMore]=useState(false),[hasMore,setHasMore]=useState(true),[error,setError]=useState("");
   useEffect(()=>{
     let cancelled=false;
