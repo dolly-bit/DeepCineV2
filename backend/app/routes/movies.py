@@ -1,7 +1,7 @@
 import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -207,19 +207,27 @@ async def get_movie_cast(movie_id: int):
 
 
 @router.get("/{movie_id}/similar")
-async def get_similar_movies(movie_id: int):
+async def get_similar_movies(
+    movie_id: int,
+    page: int = Query(default=1, ge=1, le=500),
+):
     try:
-        data = await tmdb_get(f"movie/{movie_id}/similar")
+        data = await tmdb_get(f"movie/{movie_id}/similar", params={"page": page})
         candidates = [
             movie for movie in data.get("results", [])
             if movie.get("poster_path") and movie.get("vote_count", 0) > 0
         ]
-        return [{
-            "id": movie.get("id"),
-            "title": movie.get("title"),
-            "poster_url": f"https://image.tmdb.org/t/p/w500{movie['poster_path']}",
-            "vote_average": movie.get("vote_average"),
-            "release_date": movie.get("release_date"),
-        } for movie in candidates[:10]]
+        return {
+            "page": data.get("page", page),
+            "total_pages": data.get("total_pages", 1),
+            "results": [{
+                "id": movie.get("id"),
+                "title": movie.get("title"),
+                "overview": movie.get("overview"),
+                "poster_url": f"https://image.tmdb.org/t/p/w500{movie['poster_path']}",
+                "vote_average": movie.get("vote_average"),
+                "release_date": movie.get("release_date"),
+            } for movie in candidates],
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
