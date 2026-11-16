@@ -10,7 +10,7 @@ const visualPosters = [
 
 export default function AuthShell({ eyebrow, title, description, children, footer, mode = "login" }) {
   return (
-    <main className={`auth-page ${mode === "login" ? "auth-login-simple" : ""}`}>
+    <main className="auth-page">
       <div className="auth-grain" aria-hidden="true" />
       <header className="auth-topbar">
         <Link to="/" className="brand-lockup">
@@ -21,7 +21,7 @@ export default function AuthShell({ eyebrow, title, description, children, foote
       </header>
 
       <div className="auth-layout">
-        {mode !== "login" && <section className="auth-story">
+        <section className="auth-story">
           <div className="auth-kicker"><Sparkles size={14} /> YOUR NEXT SCENE STARTS HERE</div>
           <p className="auth-overline">{eyebrow}</p>
           <h1>{title}</h1>
@@ -39,7 +39,7 @@ export default function AuthShell({ eyebrow, title, description, children, foote
           <div className="auth-story-foot">
             <span className="auth-live-dot" /> A more personal way to find what to watch.
           </div>
-        </section>}
+        </section>
 
         <section className="auth-form-panel">
           <div className="auth-form-heading">
