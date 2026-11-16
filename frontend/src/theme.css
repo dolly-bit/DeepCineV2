@@ -88,3 +88,118 @@ input.bg-zinc-900, .bg-zinc-900{
 .focus\:border-purple-500:focus{border-color:#ff555d!important}
 .bg-purple-500\/10{background-color:rgba(255,75,82,.1)!important}
 .hover\:bg-purple-500\/20:hover{background-color:rgba(255,75,82,.2)!important}
+
+
+/* FINAL SINGLE THEME: cinematic charcoal + DeepCine red.
+   Overrides legacy lime/teal/cyan styles left in page-specific CSS. */
+:root{
+  --dc-lime:#ff4b52 !important;
+  --dc-accent:#ff555d !important;
+  --dc-accent-strong:#ed343f !important;
+  --color-cm-purple:#ff4b52;
+  --color-cm-purple-deep:#c92735;
+  --color-cm-violet:#ff8589;
+  --color-cm-cyan:#ff777d;
+  --dc-blue:#ed343f;
+}
+.dc-profile-page,.dc-movie-page,.dc-library-page{
+  --dc-lime:#ff4b52 !important;
+  --dc-blue:#ed343f !important;
+  background:#090b0e !important;
+  color:#f4f4f1 !important;
+}
+/* Profile: remove the old blue/green account palette. */
+.dc-profile-page{background:#090b0e !important}
+.dc-profile-page .dc-profile-card{
+  border-color:rgba(255,255,255,.12) !important;
+  background:linear-gradient(145deg,#15191e,#0d1115) !important;
+}
+.dc-profile-page .dc-profile-card-top{
+  border-color:rgba(255,255,255,.1) !important;
+  background:radial-gradient(ellipse at 12% 0%,rgba(255,75,82,.12),transparent 55%),linear-gradient(110deg,rgba(50,20,25,.5),transparent 70%) !important;
+}
+.dc-profile-page .dc-profile-eyebrow,
+.dc-profile-page .dc-profile-kicker,
+.dc-profile-page .dc-profile-detail-icon{color:#ff8589 !important}
+.dc-profile-page .dc-profile-avatar{
+  border-color:rgba(255,75,82,.45) !important;
+  background:linear-gradient(145deg,#ff646b,#a91f2b) !important;
+  box-shadow:0 0 28px rgba(255,75,82,.13) !important;
+}
+.dc-profile-page .dc-profile-status{
+  border-color:rgba(255,75,82,.24) !important;
+  background:rgba(255,75,82,.08) !important;
+  color:#ff999d !important;
+}
+.dc-profile-page .dc-profile-status span{background:#ff6a70 !important;box-shadow:0 0 8px #ff555d88 !important}
+.dc-profile-page .dc-profile-detail{
+  border-color:rgba(255,255,255,.1) !important;
+  background:rgba(8,10,13,.42) !important;
+}
+.dc-profile-page .dc-profile-detail-icon{
+  border-color:rgba(255,75,82,.2) !important;
+  background:rgba(255,75,82,.09) !important;
+}
+.dc-profile-page .dc-profile-card-footer{
+  border-color:rgba(255,255,255,.1) !important;
+  background:rgba(3,7,10,.28) !important;
+}
+.dc-profile-page .dc-profile-logout{
+  border:1px solid rgba(255,75,82,.3) !important;
+  background:rgba(178,34,45,.13) !important;
+  color:#ff999d !important;
+}
+.dc-profile-page .dc-profile-logout:hover{border-color:rgba(255,75,82,.6) !important;background:rgba(178,34,45,.22) !important}
+/* Movie details: eliminate the old cyan/teal overrides. */
+.dc-movie-page .dc-detail-genre{
+  border-color:rgba(255,75,82,.3) !important;
+  background:rgba(255,75,82,.08) !important;
+  color:#ffb0b3 !important;
+}
+.dc-movie-page .dc-watchlist-toggle{
+  border-color:rgba(255,75,82,.35) !important;
+  background:rgba(255,75,82,.09) !important;
+  color:#ff999d !important;
+}
+.dc-movie-page .dc-watchlist-toggle:hover,
+.dc-movie-page .dc-watchlist-toggle.saved{
+  border-color:rgba(255,75,82,.6) !important;
+  background:rgba(255,75,82,.17) !important;
+  color:#ffc1c4 !important;
+}
+.dc-movie-page .dc-detail-primary{
+  border-color:#ff4b52 !important;
+  background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;
+  color:#fff !important;
+}
+.dc-movie-page .dc-detail-primary:hover{background:linear-gradient(110deg,#ff7479,#f0444c) !important}
+.dc-movie-page .dc-detail-copy .text-dc-lime,
+.dc-movie-page .dc-rating-control>div button,
+.dc-movie-page .dc-rating-control > div button,
+.dc-movie-page .dc-feedback-message,
+.dc-movie-page .dc-detail-back-button:hover{color:#ff8589 !important}
+.dc-movie-page .dc-detail-poster{border-color:rgba(255,255,255,.18) !important}
+.dc-movie-page .dc-cast-card{border-color:rgba(255,255,255,.1) !important}
+.dc-movie-page .dc-cast-card:hover{border-color:rgba(255,75,82,.4) !important}
+/* Shared page accents, including legacy selectors that used lime/cyan literals. */
+.dc-slider-title-link:hover h2{color:#ff8589 !important}
+.dc-slider-title-link:focus-visible{outline-color:#ff555d !important}
+.dc-home-content .text-cm-purple,.dc-home-content .text-purple-400{color:#ff8589 !important}
+.dc-detail-hero .text-cm-violet{color:#ff8589 !important}
+.dc-detail-genre{border-color:rgba(255,75,82,.3) !important;background:rgba(255,75,82,.08) !important;color:#ffb0b3 !important}
+.dc-detail-primary{border-color:#ff4b52 !important;background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;color:#fff !important}
+.dc-detail-primary:hover{background:linear-gradient(110deg,#ff7479,#f0444c) !important}
+.dc-detail-secondary:hover{border-color:rgba(255,75,82,.45) !important;color:#ff8589 !important}
+.dc-rating-control>div button,.dc-rating-remove:hover{color:#ff8589 !important}
+.dc-watchlist-toggle,.dc-watchlist-toggle.saved{
+ border-color:rgba(255,75,82,.35) !important;
+ background:rgba(255,75,82,.09) !important;
+ color:#ff999d !important;
+}
+.dc-watchlist-toggle:hover{background:rgba(255,75,82,.17) !important}
+.dc-feedback-message{color:#ff999d !important}
+.dc-detail-back-button:hover{color:#ff8589 !important;border-color:rgba(255,75,82,.4) !important}
+.dc-library-tabs button.active{border-color:#ff4b52 !important;color:#ff8589 !important}
+.dc-library-tabs button.active span{background:rgba(255,75,82,.13) !important;color:#ff8589 !important}
+.dc-library-empty-state svg,.dc-library-heading .dc-slider-eyebrow{color:#ff8589 !important}
+.dc-profile-page .dc-profile-detail-icon{color:#ff8589 !important}
