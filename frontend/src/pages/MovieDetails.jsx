@@ -71,7 +71,7 @@ export default function MovieDetails() {
         setMovie(movieData);
         setTrailer(trailerData?.url || null);
         setCast(castData || []);
-        setSimilarMovies(similarData || []);
+        setSimilarMovies(similarData?.results || []);
 
         // Opening a movie details page is recorded as a watch-history signal.
         recordWatch(movieData.id);
@@ -242,7 +242,7 @@ export default function MovieDetails() {
 
       {similarMovies.length > 0 && (
         <div className="dc-detail-section dc-similar-section mx-auto max-w-7xl px-6 pb-10">
-          <h2 className="dc-detail-section-title mb-5 text-xl font-bold">Similar films</h2>
+          <div className="mb-5 flex items-center justify-between gap-4"><h2 className="dc-detail-section-title text-xl font-bold">Similar films</h2><button type="button" className="dc-similar-view-all" onClick={() => navigate(`/movie/${movie.id}/similar`)}>More similar movies <span aria-hidden="true">→</span></button></div>
 
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-cm-bg to-transparent" />

@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Landing from "./pages/Landing";
 import MovieDetails from "./pages/MovieDetails";
+import SimilarMoviesPage from "./pages/SimilarMoviesPage";
 import SearchPage from "./pages/Search";
 import MoviesListPage from "./pages/MoviesListPage";
 import Profile from "./pages/Profile";
@@ -38,6 +39,7 @@ export default function App() {
         />
         <Route path="/recommend" element={<RecommendPage />} />
         <Route path="/movie/:id" element={<MovieDetails />} />
+        <Route path="/movie/:id/similar" element={<SimilarMoviesPage />} />
         <Route
           path="/search"
           element={

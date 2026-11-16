@@ -300,3 +300,25 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .dc-category-tile, .dc-movie-poster-image, .dc-side-link svg { transition: none !important; }
 }
+
+
+/* Similar movie discovery page */
+.dc-similar-view-all{display:inline-flex;align-items:center;gap:8px;color:#ff8589;font-size:11px;font-weight:700;white-space:nowrap;transition:color .2s,transform .2s}
+.dc-similar-view-all:hover{color:#ffb0b3;transform:translateX(2px)}
+.dc-similar-page{padding:30px clamp(20px,3vw,46px) 60px;max-width:1600px;margin:0 auto}
+.dc-similar-back{display:inline-flex;align-items:center;gap:8px;margin-bottom:28px;color:#aab4b8;font-size:12px}
+.dc-similar-back:hover{color:#ff8589}
+.dc-similar-page>.dc-slider-eyebrow{display:block;color:#ff777d;font-size:9px;letter-spacing:.2em}
+.dc-similar-page h1{margin:10px 0 8px;font-size:clamp(25px,3vw,38px);font-weight:780;letter-spacing:-.045em}
+.dc-similar-intro{max-width:700px;margin-bottom:28px;color:#9ba5aa;font-size:12px;line-height:1.7}
+.dc-similar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:24px 16px}
+.dc-similar-grid .dc-movie-card{min-width:0}
+.dc-similar-grid .dc-movie-poster{border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden}
+.dc-similar-loading,.dc-similar-empty,.dc-similar-end{padding:42px 12px;text-align:center;color:#9ba5aa;font-size:12px}
+.dc-similar-loading{display:flex;justify-content:center;align-items:center;gap:10px}
+.dc-similar-load-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:34px 0}
+.dc-similar-load{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border:1px solid rgba(255,85,93,.4);border-radius:9px;background:rgba(255,85,93,.1);color:#ff9296;font-size:11px;font-weight:700}
+.dc-similar-load:disabled{opacity:.6;cursor:wait}
+.dc-similar-load-wrap>span{color:#78858a;font-size:10px}
+.dc-similar-error{margin-top:12px;color:#ff9296;text-align:center;font-size:11px}
+@media(max-width:600px){.dc-similar-page{padding:22px 15px 42px}.dc-similar-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 12px}.dc-similar-view-all{font-size:10px}}

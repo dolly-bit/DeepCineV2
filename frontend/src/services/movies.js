@@ -80,9 +80,14 @@ export const getMovieCast = async (id) => {
   return response.data;
 };
 
-export const getSimilarMovies = async (id) => {
-  const response = await api.get(`/movies/${id}/similar`);
-  return response.data;
+export const getSimilarMovies = async (id, page = 1) => {
+  const response = await api.get(`/movies/${id}/similar`, { params: { page } });
+  const payload = response.data || {};
+  return {
+    page: payload.page || page,
+    total_pages: payload.total_pages || 1,
+    results: (payload.results || []).map(normalizeMovie),
+  };
 };
 
 
@@ -211,4 +216,18 @@ export const addToWatchlist = async (tmdbId) => {
 export const removeFromWatchlist = async (tmdbId) => {
   const response = await api.delete(`/watchlist/${tmdbId}`);
   return response.data;
+};
+
+export const getCoWatchRecommendations = async (userId, options = {}) => {
+  if (!userId) return [];
+  const { topK = 20, minSharedUsers = 1 } = options;
+  try {
+    const response = await api.get(`/recommend/co-watch/${userId}`, {
+      params: { top_k: topK, min_shared_users: minSharedUsers },
+    });
+    return (response.data || []).map(normalizeMovie);
+  } catch (err) {
+    console.error("Co-view recommendation error:", err);
+    return [];
+  }
 };
