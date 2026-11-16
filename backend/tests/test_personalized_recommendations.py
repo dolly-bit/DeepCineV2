@@ -119,3 +119,29 @@ def test_explanations_name_genres_from_positive_user_history(db_session):
     assert explanations[105].startswith(
         "Selected by the personalized ranking model"
     )
+
+
+
+def test_model_signal_failures_fall_back_to_catalog_popularity(db_session, monkeypatch):
+    user, movies = seed_interactions(db_session)
+    movies[3].popularity = 20
+    movies[4].popularity = 10
+    db_session.commit()
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("model artifact unavailable")
+
+    monkeypatch.setattr(
+        recommendation_service, "recommend_for_user_content", unavailable
+    )
+    monkeypatch.setattr(
+        recommendation_service.collaborative,
+        "recommendation_scores_for_user",
+        unavailable,
+    )
+
+    results = recommendation_service.get_personalized_recommendations(
+        user.id, db_session, top_k=2
+    )
+
+    assert [movie.tmdb_id for movie in results] == [104, 105]
