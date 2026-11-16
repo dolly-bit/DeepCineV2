@@ -15,7 +15,7 @@ export default function RecommendPage(){
  if(cancelled)return;setRecommended(s||[]);setPersonalized(p||[]);setCollaborative(c||[]);setCoWatch(w||[]);setTrending(t||[]);setFilterPicks(f||[]);
  }catch(err){console.error("AI Picks load failed",err);if(!cancelled)setError("Some recommendations couldn't be loaded. Please try again.");}finally{if(!cancelled)setLoading(false);}}
  load();return()=>{cancelled=true;};},[search,userId,filters]);
- const hasPersonalSignals=Boolean(search||filters||personalized.length||collaborative.length);
+ const hasPersonalSignals=Boolean(search||filters||personalized.length||collaborative.length||coWatch.length);
  return <div className="dc-app-shell"><HomeSidebar/><main className="dc-app-main"><Navbar/><div className="dc-ai-page">
  <section className="dc-ai-intro"><span className="dc-discover-kicker"><Sparkles size={13}/> DEEPCINE INTELLIGENCE</span><h1>Your next watch, <em>thoughtfully picked.</em></h1><p>Movie picks shaped by what you search, what you rate and the genres you explore. Use the search icon in the top bar or build a mix in Explore.</p><div className="dc-ai-shortcuts"><button onClick={()=>navigate("/discover")}><SlidersHorizontal size={14}/> Build a genre mix</button>{search&&<span className="dc-ai-context">Search signal: “{search}”</span>}{filters&&<span className="dc-ai-context">Your Explore filters are applied</span>}</div></section>
  {error&&<p className="dc-ai-error">{error}</p>}
