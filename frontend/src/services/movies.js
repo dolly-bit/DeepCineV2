@@ -217,3 +217,12 @@ export const removeFromWatchlist = async (tmdbId) => {
   const response = await api.delete(`/watchlist/${tmdbId}`);
   return response.data;
 };
+
+export const getCoWatchRecommendations = async (userId, options = {}) => {
+  if (!userId) return [];
+  const { topK = 20, minSharedUsers = 1 } = options;
+  const response = await api.get(`/recommend/co-watch/${userId}`, {
+    params: { top_k: topK, min_shared_users: minSharedUsers },
+  });
+  return (response.data || []).map(normalizeMovie);
+};
