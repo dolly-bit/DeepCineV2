@@ -2138,3 +2138,34 @@ input.bg-zinc-900, .bg-zinc-900{
   .auth-page .auth-form-footer{margin-top:10px !important;padding-top:9px !important}
   .auth-page .auth-legal{margin-top:7px !important}
 }
+
+
+/* Auth colour correction: the auth-specific styles still referenced the old lime token. */
+.auth-page{
+  --dc-lime:#ff4b52 !important;
+  --auth-red:#ff4b52 !important;
+  --auth-red-soft:#ff8589 !important;
+}
+.auth-page .auth-kicker{
+  border-color:rgba(255,75,82,.3) !important;
+  background:rgba(255,75,82,.07) !important;
+  color:#ff8589 !important;
+}
+.auth-page .auth-story h1 em{color:#ff555d !important}
+.auth-page .orbit-center{
+  border-color:rgba(255,75,82,.5) !important;
+  color:#ff8589 !important;
+  background:rgba(18,12,14,.97) !important;
+}
+.auth-page .auth-live-dot{background:#ff555d !important;box-shadow:0 0 12px rgba(255,75,82,.65) !important}
+.auth-page .auth-input-wrap:focus-within{border-color:#ff555d !important;box-shadow:0 0 0 3px rgba(255,75,82,.12) !important}
+.auth-page .auth-icon-button:hover{color:#ff8589 !important}
+.auth-page .auth-submit{
+  border:1px solid #ff4b52 !important;
+  background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;
+  color:#fff !important;
+  box-shadow:0 8px 22px rgba(231,46,59,.2) !important;
+}
+.auth-page .auth-submit:hover:not(:disabled){background:linear-gradient(110deg,#ff7479,#f0444c) !important}
+.auth-page .auth-form-footer a{color:#ff777c !important}
+.auth-page .auth-step{color:#ff8589 !important}
