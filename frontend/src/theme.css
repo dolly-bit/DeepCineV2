@@ -1,0 +1,270 @@
+/* ── DeepCine global cinematic-red theme ─────────────────────────────
+   Shared tokens for every authenticated and public route. */
+:root{
+  --dc-bg:#090b0e;
+  --dc-panel:#11161b;
+  --dc-panel-raised:#191e24;
+  --dc-border:rgba(255,255,255,.12);
+  --dc-border-strong:rgba(255,75,82,.42);
+  --dc-accent:#ff555d;
+  --dc-accent-strong:#ed343f;
+  --dc-text:#f4f4f1;
+  --dc-muted:#9ba5aa;
+  --dc-red:#ff4b52;
+  --dc-red-soft:#ff8589;
+}
+html,body,#root{min-height:100%;background:#090b0e;color:#f4f4f1}
+body{
+ background:
+  radial-gradient(ellipse at 82% -10%,rgba(130,35,43,.10),transparent 34rem),
+  #090b0e;
+ color:#f4f4f1;
+}
+::selection{background:rgba(255,75,82,.32);color:#fff}
+a{ -webkit-tap-highlight-color:transparent }
+button,input,select,textarea{font:inherit}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #ff555d;outline-offset:3px}
+.dc-app-shell,.dc-app-main{background:transparent;color:#f4f4f1}
+.dc-side-panel{background:linear-gradient(180deg,#0c1014,#090c10 72%,#0c0e12);border-color:rgba(255,255,255,.1)}
+.dc-side-brand>span:last-child>span,.dc-side-link.active,.dc-side-link.active svg,.dc-side-link:hover svg{color:#ff7379}
+.dc-side-mark{border-color:#ff777c;background:linear-gradient(145deg,#ff646b,#a91f2b);box-shadow:0 8px 24px rgba(255,65,75,.16)}
+.dc-side-link.active{border-color:rgba(255,75,82,.24);background:linear-gradient(100deg,rgba(255,75,82,.16),rgba(80,22,29,.12));box-shadow:inset 3px 0 #ff555d}
+.dc-side-link:hover{background:rgba(255,75,82,.07)}
+.dc-side-search:hover{border-color:rgba(255,75,82,.4);background:rgba(255,75,82,.06)}
+.dc-side-status{background:#ff6a70;box-shadow:0 0 13px #ff555d88}
+.dc-dashboard-topbar{border-color:rgba(255,255,255,.1);background:rgba(7,9,12,.9);backdrop-filter:blur(16px)}
+.dc-topbar-search,.dc-topbar-icon,.dc-user-avatar{border-color:rgba(255,255,255,.14)}
+.dc-topbar-search:focus-within{border-color:rgba(255,75,82,.55);box-shadow:0 0 0 3px rgba(255,75,82,.08)}
+.dc-topbar-icon:hover{border-color:rgba(255,75,82,.45);color:#ff7379;background:rgba(255,75,82,.07)}
+.dc-topbar-auth a:last-child,.dc-hero-primary,.dc-catalog-load,.dc-detail-primary,.dc-profile-logout{
+ background:linear-gradient(110deg,#ff5b61,#e82f3b);color:#fff;
+ box-shadow:0 8px 22px rgba(231,46,59,.2);
+}
+.dc-topbar-auth a:last-child:hover,.dc-hero-primary:hover,.dc-catalog-load:hover,.dc-detail-primary:hover,.dc-profile-logout:hover{background:linear-gradient(110deg,#ff7479,#f0444c)}
+.dc-feature-kicker,.dc-feature-rating,.dc-category-all,.dc-home-footer span:first-child,.dc-slider-eyebrow,.dc-discover-kicker,.dc-discover-step,.dc-ai-intro .dc-discover-kicker,.dc-catalog-heading .dc-slider-eyebrow,.dc-profile-eyebrow{color:#ff8589}
+.dc-feature-kicker i,.dc-feature-pagination button.active{background:#ff555d}
+.dc-feature-hero{border-color:rgba(255,255,255,.14);background:#11161b}
+.dc-feature-shade{background:linear-gradient(90deg,rgba(5,7,10,.96),rgba(5,7,10,.72) 43%,rgba(5,7,10,.12)),linear-gradient(0deg,rgba(5,7,10,.65),transparent 55%)}
+.dc-hero-primary{background:linear-gradient(110deg,#ff5b61,#e82f3b);color:#fff}
+.dc-hero-secondary{background:rgba(18,13,16,.8);border-color:rgba(255,255,255,.2);color:#f4f4f1}
+.dc-category-panel,.dc-recommendation-empty,.dc-profile-card,.dc-detail-panel,.dc-discover-builder,.dc-catalog-filter,.dc-ai-card,.dc-library-empty-state{
+ border-color:rgba(255,255,255,.12);
+ background:linear-gradient(145deg,#15191e,#0d1115);
+}
+.dc-category-tile{background:linear-gradient(140deg,#492127,#24151a);border-color:rgba(255,255,255,.1)}
+.dc-category-tile:hover{border-color:rgba(255,110,116,.6)}
+.dc-movie-poster{background:#171c21;border-color:rgba(255,255,255,.13)}
+.dc-movie-card:hover .dc-movie-poster{border-color:rgba(255,75,82,.5);box-shadow:0 17px 38px rgba(0,0,0,.32),0 0 0 1px rgba(255,75,82,.08)}
+.dc-movie-rating{border-color:rgba(255,75,82,.24);background:rgba(8,10,13,.9);color:#ff999d}
+.dc-slider-controls>button:hover,.dc-view-all:hover{color:#ff8589}
+.dc-movie-collection-tabs button.active,.dc-library-tabs button.active,.dc-genre-chip.selected,.dc-mood-choice.chosen{
+ border-color:rgba(255,75,82,.48)!important;background:rgba(255,75,82,.12)!important;color:#ff999d!important;
+}
+.dc-genre-chip,.dc-mood-choice,.dc-library-tabs button,.dc-movie-collection-tabs button{
+ border-color:rgba(255,255,255,.13);
+}
+.dc-discover-stamp,.dc-mood-icon,.dc-profile-detail-icon{color:#ff777d}
+.dc-discover-page,.dc-ai-page,.dc-catalog-page,.dc-library-page,.dc-profile-content,.dc-search-page{color:#f4f4f1}
+.dc-discover-builder,.dc-profile-card,.dc-detail-card,.dc-catalog-page .dc-movie-collection-tabs{
+ background:linear-gradient(145deg,#14191e,#0c1014);
+ border-color:rgba(255,255,255,.12);
+}
+.dc-discover-page input,.dc-discover-page select,.dc-ai-page input,.dc-catalog-page select,.dc-profile-page input,
+input.bg-zinc-900, .bg-zinc-900{
+ background-color:#080c10!important;color:#f4f4f1!important;border-color:rgba(255,255,255,.16)!important;
+}
+.dc-discover-page input:focus,.dc-discover-page select:focus,.dc-ai-page input:focus{border-color:#ff555d!important;box-shadow:0 0 0 3px rgba(255,75,82,.1)}
+.dc-library-tabs button,.dc-movie-collection-tabs button,.dc-genre-chip{background:rgba(255,255,255,.025);color:#c4cbce}
+.dc-library-tabs button:hover,.dc-movie-collection-tabs button:hover,.dc-genre-chip:hover{border-color:rgba(255,75,82,.35)}
+.dc-profile-avatar,.dc-profile-status>span{background:#ff555d}
+.dc-profile-status{color:#ff9296}
+.dc-profile-logout{border:0}
+.dc-home-footer,.dc-profile-card-footer,.dc-library-tabs{border-color:rgba(255,255,255,.12)}
+/* Older Tailwind utility classes used by the search route */
+.bg-purple-600{background-color:#ed343f!important}
+.hover\:bg-purple-700:hover{background-color:#c92735!important}
+.text-purple-200,.text-purple-300{color:#ff9296!important}
+.border-purple-500,.border-purple-500\/40{border-color:rgba(255,75,82,.45)!important}
+.focus\:border-purple-500:focus{border-color:#ff555d!important}
+.bg-purple-500\/10{background-color:rgba(255,75,82,.1)!important}
+.hover\:bg-purple-500\/20:hover{background-color:rgba(255,75,82,.2)!important}
+
+
+/* FINAL SINGLE THEME: cinematic charcoal + DeepCine red.
+   Overrides legacy lime/teal/cyan styles left in page-specific CSS. */
+:root{
+  --dc-lime:#ff4b52 !important;
+  --dc-accent:#ff555d !important;
+  --dc-accent-strong:#ed343f !important;
+  --color-cm-purple:#ff4b52;
+  --color-cm-purple-deep:#c92735;
+  --color-cm-violet:#ff8589;
+  --color-cm-cyan:#ff777d;
+  --dc-blue:#ed343f;
+}
+.dc-profile-page,.dc-movie-page,.dc-library-page{
+  --dc-lime:#ff4b52 !important;
+  --dc-blue:#ed343f !important;
+  background:#090b0e !important;
+  color:#f4f4f1 !important;
+}
+/* Profile: remove the old blue/green account palette. */
+.dc-profile-page{background:#090b0e !important}
+.dc-profile-page .dc-profile-card{
+  border-color:rgba(255,255,255,.12) !important;
+  background:linear-gradient(145deg,#15191e,#0d1115) !important;
+}
+.dc-profile-page .dc-profile-card-top{
+  border-color:rgba(255,255,255,.1) !important;
+  background:radial-gradient(ellipse at 12% 0%,rgba(255,75,82,.12),transparent 55%),linear-gradient(110deg,rgba(50,20,25,.5),transparent 70%) !important;
+}
+.dc-profile-page .dc-profile-eyebrow,
+.dc-profile-page .dc-profile-kicker,
+.dc-profile-page .dc-profile-detail-icon{color:#ff8589 !important}
+.dc-profile-page .dc-profile-avatar{
+  border-color:rgba(255,75,82,.45) !important;
+  background:linear-gradient(145deg,#ff646b,#a91f2b) !important;
+  box-shadow:0 0 28px rgba(255,75,82,.13) !important;
+}
+.dc-profile-page .dc-profile-status{
+  border-color:rgba(255,75,82,.24) !important;
+  background:rgba(255,75,82,.08) !important;
+  color:#ff999d !important;
+}
+.dc-profile-page .dc-profile-status span{background:#ff6a70 !important;box-shadow:0 0 8px #ff555d88 !important}
+.dc-profile-page .dc-profile-detail{
+  border-color:rgba(255,255,255,.1) !important;
+  background:rgba(8,10,13,.42) !important;
+}
+.dc-profile-page .dc-profile-detail-icon{
+  border-color:rgba(255,75,82,.2) !important;
+  background:rgba(255,75,82,.09) !important;
+}
+.dc-profile-page .dc-profile-card-footer{
+  border-color:rgba(255,255,255,.1) !important;
+  background:rgba(3,7,10,.28) !important;
+}
+.dc-profile-page .dc-profile-logout{
+  border:1px solid rgba(255,75,82,.3) !important;
+  background:rgba(178,34,45,.13) !important;
+  color:#ff999d !important;
+}
+.dc-profile-page .dc-profile-logout:hover{border-color:rgba(255,75,82,.6) !important;background:rgba(178,34,45,.22) !important}
+/* Movie details: eliminate the old cyan/teal overrides. */
+.dc-movie-page .dc-detail-genre{
+  border-color:rgba(255,75,82,.3) !important;
+  background:rgba(255,75,82,.08) !important;
+  color:#ffb0b3 !important;
+}
+.dc-movie-page .dc-watchlist-toggle{
+  border-color:rgba(255,75,82,.35) !important;
+  background:rgba(255,75,82,.09) !important;
+  color:#ff999d !important;
+}
+.dc-movie-page .dc-watchlist-toggle:hover,
+.dc-movie-page .dc-watchlist-toggle.saved{
+  border-color:rgba(255,75,82,.6) !important;
+  background:rgba(255,75,82,.17) !important;
+  color:#ffc1c4 !important;
+}
+.dc-movie-page .dc-detail-primary{
+  border-color:#ff4b52 !important;
+  background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;
+  color:#fff !important;
+}
+.dc-movie-page .dc-detail-primary:hover{background:linear-gradient(110deg,#ff7479,#f0444c) !important}
+.dc-movie-page .dc-detail-copy .text-dc-lime,
+.dc-movie-page .dc-rating-control>div button,
+.dc-movie-page .dc-rating-control > div button,
+.dc-movie-page .dc-feedback-message,
+.dc-movie-page .dc-detail-back-button:hover{color:#ff8589 !important}
+.dc-movie-page .dc-detail-poster{border-color:rgba(255,255,255,.18) !important}
+.dc-movie-page .dc-cast-card{border-color:rgba(255,255,255,.1) !important}
+.dc-movie-page .dc-cast-card:hover{border-color:rgba(255,75,82,.4) !important}
+/* Shared page accents, including legacy selectors that used lime/cyan literals. */
+.dc-slider-title-link:hover h2{color:#ff8589 !important}
+.dc-slider-title-link:focus-visible{outline-color:#ff555d !important}
+.dc-home-content .text-cm-purple,.dc-home-content .text-purple-400{color:#ff8589 !important}
+.dc-detail-hero .text-cm-violet{color:#ff8589 !important}
+.dc-detail-genre{border-color:rgba(255,75,82,.3) !important;background:rgba(255,75,82,.08) !important;color:#ffb0b3 !important}
+.dc-detail-primary{border-color:#ff4b52 !important;background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;color:#fff !important}
+.dc-detail-primary:hover{background:linear-gradient(110deg,#ff7479,#f0444c) !important}
+.dc-detail-secondary:hover{border-color:rgba(255,75,82,.45) !important;color:#ff8589 !important}
+.dc-rating-control>div button,.dc-rating-remove:hover{color:#ff8589 !important}
+.dc-watchlist-toggle,.dc-watchlist-toggle.saved{
+ border-color:rgba(255,75,82,.35) !important;
+ background:rgba(255,75,82,.09) !important;
+ color:#ff999d !important;
+}
+.dc-watchlist-toggle:hover{background:rgba(255,75,82,.17) !important}
+.dc-feedback-message{color:#ff999d !important}
+.dc-detail-back-button:hover{color:#ff8589 !important;border-color:rgba(255,75,82,.4) !important}
+.dc-library-tabs button.active{border-color:#ff4b52 !important;color:#ff8589 !important}
+.dc-library-tabs button.active span{background:rgba(255,75,82,.13) !important;color:#ff8589 !important}
+.dc-library-empty-state svg,.dc-library-heading .dc-slider-eyebrow{color:#ff8589 !important}
+.dc-profile-page .dc-profile-detail-icon{color:#ff8589 !important}
+
+
+/* Final pass: remove remaining teal/cyan styling from Explore, AI Picks and account avatar. */
+.dc-user-avatar{
+  border:1px solid rgba(255,75,82,.48) !important;
+  background:linear-gradient(145deg,#ff646b,#a91f2b) !important;
+  color:#fff !important;
+  box-shadow:0 5px 18px rgba(255,65,75,.16) !important;
+}
+.dc-topbar-user small{color:#ff999d !important}
+.dc-topbar-user:hover .dc-user-avatar{background:linear-gradient(145deg,#ff777d,#c92735) !important}
+.dc-discover-intro,.dc-ai-intro{
+  border-color:rgba(255,75,82,.25) !important;
+  background:radial-gradient(ellipse at 82% 10%,rgba(255,75,82,.13),transparent 42%),linear-gradient(115deg,#211216,#111317 65%,#191014) !important;
+}
+.dc-discover-intro:after{border-color:rgba(255,100,107,.1) !important;box-shadow:0 0 0 28px rgba(255,100,107,.035),0 0 0 58px rgba(255,100,107,.02) !important}
+.dc-discover-kicker,.dc-discover-step,.dc-discover-stamp{color:#ff8589 !important}
+.dc-discover-intro h1,.dc-ai-intro h1{color:#f4f4f1 !important}
+.dc-discover-intro h1 em,.dc-ai-intro h1 em{color:#ff8589 !important}
+.dc-discover-intro p,.dc-ai-intro p{color:#a5a9ad !important}
+.dc-discover-builder{
+  border-color:rgba(255,255,255,.12) !important;
+  background:linear-gradient(145deg,#15191e,#0d1115) !important;
+}
+.dc-discover-builder h2,.dc-discover-results h2,.dc-ai-page h2{color:#f1f0e9 !important}
+.dc-discover-builder p,.dc-discover-results p{color:#9ba5aa !important}
+.dc-mood-choice,.dc-genre-chip,.dc-preference-control,.dc-selection-summary{
+  border-color:rgba(255,255,255,.13) !important;
+  background:rgba(255,255,255,.025) !important;
+  color:#d9dcdd !important;
+}
+.dc-mood-choice:hover,.dc-genre-chip:hover,.dc-mood-choice.chosen,.dc-genre-chip.selected{
+  border-color:rgba(255,75,82,.55) !important;
+  background:rgba(255,75,82,.1) !important;
+  color:#ffb0b3 !important;
+}
+.dc-mood-icon,.dc-mood-choice .dc-mood-check,.dc-genre-chip>span{color:#ff8589 !important}
+.dc-mood-choice[class*="tone-"] .dc-mood-icon{color:#ff8589 !important}
+.dc-mood-choice[class*="tone-"].chosen .dc-mood-icon{color:#ffb0b3 !important}
+.dc-preference-control select,.dc-discover-page select{
+  border-color:rgba(255,255,255,.15) !important;
+  background:#090b0e !important;color:#f4f4f1 !important;
+}
+.dc-discover-empty>span{border-color:rgba(255,75,82,.35) !important;background:rgba(255,75,82,.1) !important;color:#ff8589 !important}
+.dc-discover-empty button,.dc-discover-more button,.dc-ai-search-button,.dc-ai-shortcuts button,.dc-send-to-ai{
+  border:1px solid rgba(255,75,82,.4) !important;
+  background:linear-gradient(110deg,#ff5b61,#e82f3b) !important;
+  color:#fff !important;
+}
+.dc-discover-more button:hover,.dc-discover-empty button:hover,.dc-ai-search-button:hover,.dc-ai-shortcuts button:hover,.dc-send-to-ai:hover{
+  border-color:#ff8589 !important;
+  background:linear-gradient(110deg,#ff7479,#f0444c) !important;
+  color:#fff !important;
+}
+.dc-ai-context{border-color:rgba(255,255,255,.14) !important;background:rgba(255,255,255,.04) !important;color:#c1c5c8 !important}
+.dc-ai-fallback,.dc-ai-page .dc-recommendation-empty{
+  border-color:rgba(255,255,255,.12) !important;
+  background:linear-gradient(145deg,#15191e,#0d1115) !important;
+}
+.dc-ai-page .dc-slider-eyebrow{color:#ff8589 !important}
+.dc-ai-page .dc-slider-heading h2{color:#f4f4f1 !important}
+.dc-ai-footer{color:#858d93 !important}
+.dc-discover-page .dc-builder-divider{background:rgba(255,255,255,.1) !important}
+.dc-discover-page .dc-results-sort{color:#ff999d !important}
+.dc-discover-page .dc-movie-poster{border-color:rgba(255,255,255,.13) !important}

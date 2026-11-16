@@ -1,29 +1,21 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_current_user
 from app.database.connection import get_db
 from app.models import SearchHistory
+from app.models.user import User
 
-router = APIRouter(
-    prefix="/search-history",
-    tags=["Search History"]
-)
+router = APIRouter(prefix="/search-history", tags=["Search History"])
 
 
 @router.post("/")
 def save_search(
-    user_id: int,
-    query: str,
-    db: Session = Depends(get_db)
+    query: str = Query(..., min_length=1, max_length=300),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    history = SearchHistory(
-        user_id=user_id,
-        query=query
-    )
-
+    history = SearchHistory(user_id=current_user.id, query=query.strip())
     db.add(history)
     db.commit()
-
-    return {
-        "message": "Search saved"
-    }
+    return {"message": "Search saved"}

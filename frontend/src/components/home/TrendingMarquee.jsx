@@ -1,55 +1,34 @@
 import { useNavigate } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import MovieCard from "./MovieCard";
 
 export default function TrendingMarquee({ movies = [], loading }) {
   const navigate = useNavigate();
-
-  if (loading) {
-    return (
-      <section className="max-w-7xl mx-auto px-6 lg:px-10 pt-2 pb-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="h-[330px] rounded-2xl bg-zinc-800 animate-pulse"
-            />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (!movies.length) {
-    return (
-      <section className="max-w-7xl mx-auto px-6 lg:px-10 py-10 text-center text-gray-400">
-        No trending movies available.
-      </section>
-    );
-  }
-
-  const loop = [...movies, ...movies];
+  const visibleMovies = movies.slice(0, 12);
+  const loopMovies = [...visibleMovies, ...visibleMovies];
 
   return (
-    <section
-      id="trending"
-      className="max-w-7xl mx-auto px-6 lg:px-10 pt-2 pb-6 overflow-hidden"
-    >
-      <div className="relative overflow-hidden">
-        <div className="flex gap-6 animate-marquee w-max">
-          {loop.map((movie, index) => (
-            <div
-              key={`${movie.id}-${index}`}
-              onClick={() => navigate(`/movie/${movie.id}`)}
-              className="cursor-pointer"
-            >
-              <MovieCard movie={movie} />
-            </div>
-          ))}
-        </div>
-
-        <div className="absolute left-0 top-0 h-full w-24 bg-gradient-to-r from-[#08070C] to-transparent pointer-events-none" />
-        <div className="absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-[#08070C] to-transparent pointer-events-none" />
+    <section id="trending" className="dc-trending-section">
+      <div className="dc-trending-heading">
+        <div><span className="dc-slider-eyebrow">WHAT PEOPLE ARE WATCHING</span><h2>Trending films<span>.</span></h2></div>
+        <span className="dc-trending-count">{loading ? "UPDATING PICKS" : `${movies.length} FILMS TO EXPLORE`}</span>
       </div>
+      {loading ? (
+        <div className="dc-trending-track">{[...Array(6)].map((_, index) => <div key={index} className="dc-movie-skeleton" />)}</div>
+      ) : visibleMovies.length ? (
+        <div className="dc-trending-viewport">
+          <div className="dc-trending-track dc-trending-auto">
+            {loopMovies.map((movie, index) => (
+              <div className="dc-trending-item" key={`${movie.id}-${index}`}>
+                <MovieCard movie={movie} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="dc-trending-empty">Trending titles are taking a moment to arrive. Please refresh in a little while.</div>
+      )}
+      <button className="dc-trending-more" onClick={() => navigate("/discover")}>Find new movies <ArrowRight size={14} /></button>
     </section>
   );
 }

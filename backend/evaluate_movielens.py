@@ -1,0 +1,1185 @@
+"""
+Leakage-aware MovieLens recommender benchmark for DeepCine.
+
+Run from backend/:
+  python evaluate_movielens.py --ratings-path ../datasets/movielens/ratings.csv \
+      --links-path ../datasets/movielens/links.csv --ks 5,10,20
+
+The benchmark is isolated from production watch_history. It uses a per-user
+chronological train/validation/test split. Model fitting and user profiles
+use train only; RRF weights are selected on validation only; final metrics
+are computed once on the held-out test partition.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import itertools
+import json
+import math
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy.sparse import csr_matrix
+from implicit.als import AlternatingLeastSquares
+from threadpoolctl import threadpool_limits
+
+from app.database.connection import SessionLocal
+from app.models import Movie, MovieGenre
+from ai.ranking import reciprocal_rank_fusion, diversify_by_genre
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "evaluation" / "results"
+DEFAULT_WEIGHTS = {
+    "content": 1.0,
+    "collaborative": 1.0,
+    "explicit_preferences": 0.65,
+    "popularity": 0.25,
+}
+PRODUCTION_WEIGHTS = {
+    "content": 1.0,
+    "collaborative": 1.0,
+    "explicit_preferences": 1.25,
+    "popularity": 0.2,
+}
+WEIGHT_GRID = (0.5, 1.0, 2.0)
+DEFAULT_EVALUATION_USER_SAMPLE_SIZE = 2_000
+TUNING_USER_SAMPLE_SIZE = 2_000
+QUICK_TUNING_USER_SAMPLE_SIZE = 100
+QUICK_WEIGHT_GRID = (0.5, 1.0)
+
+
+def load_movie_mapping(links_path: str | Path, catalog_tmdb_ids: set[int]):
+    links = pd.read_csv(links_path, usecols=["movieId", "tmdbId"])
+    links["movieId"] = pd.to_numeric(links["movieId"], errors="coerce")
+    links["tmdbId"] = pd.to_numeric(links["tmdbId"], errors="coerce")
+    links = links.dropna(subset=["movieId", "tmdbId"])
+    links["movieId"] = links["movieId"].astype("int64")
+    links["tmdbId"] = links["tmdbId"].astype("int64")
+    links = links[links["tmdbId"].isin(catalog_tmdb_ids)]
+    links = links.drop_duplicates(subset=["movieId"], keep="first")
+    return dict(zip(links["movieId"], links["tmdbId"]))
+
+
+def load_latest_ratings(ratings_path, movie_mapping, chunksize=500_000):
+    """Stream ratings; latest timestamp wins before positive filtering."""
+    latest = {}
+    total_rows = matched_rows = 0
+    for chunk in pd.read_csv(
+        ratings_path,
+        usecols=["userId", "movieId", "rating", "timestamp"],
+        chunksize=chunksize,
+    ):
+        total_rows += len(chunk)
+        chunk["movieId"] = pd.to_numeric(chunk["movieId"], errors="coerce")
+        chunk = chunk.dropna(subset=["movieId"])
+        chunk["movieId"] = chunk["movieId"].astype("int64")
+        chunk = chunk[chunk["movieId"].isin(movie_mapping)]
+        matched_rows += len(chunk)
+        if chunk.empty:
+            continue
+        chunk["tmdb_id"] = chunk["movieId"].map(movie_mapping)
+        chunk = chunk.sort_values("timestamp").drop_duplicates(
+            ["userId", "tmdb_id"], keep="last"
+        )
+        for row in chunk.itertuples(index=False):
+            key = (int(row.userId), int(row.tmdb_id))
+            timestamp = int(row.timestamp)
+            previous = latest.get(key)
+            if previous is None or timestamp >= previous[0]:
+                latest[key] = (timestamp, float(row.rating))
+    return latest, {
+        "ratings_rows_scanned": total_rows,
+        "ratings_rows_matching_catalog": matched_rows,
+        "latest_user_movie_pairs": len(latest),
+    }
+
+
+def build_temporal_split(
+    latest_ratings, positive_threshold=4.0,
+    train_ratio=0.6, validation_ratio=0.2, test_ratio=0.2,
+):
+    """
+    Per-user chronological 3-way split.
+
+    Users need >=3 positive catalog interactions so every partition has at
+    least one item. Rounding is deterministic and leaves at least one item
+    in each partition.
+    """
+    ratios = (train_ratio, validation_ratio, test_ratio)
+    if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
+        raise ValueError("train/validation/test ratios must be positive and sum to 1")
+    by_user = defaultdict(list)
+    positive_pairs = 0
+    for (user_id, tmdb_id), (timestamp, rating) in latest_ratings.items():
+        if rating >= positive_threshold:
+            by_user[user_id].append((timestamp, tmdb_id))
+            positive_pairs += 1
+
+    train, validation, test = {}, {}, {}
+    excluded_users = 0
+    for user_id, events in by_user.items():
+        events.sort(key=lambda item: (item[0], item[1]))
+        n = len(events)
+        if n < 3:
+            excluded_users += 1
+            continue
+        n_test = max(1, int(math.floor(n * test_ratio)))
+        n_validation = max(1, int(math.floor(n * validation_ratio)))
+        while n_test + n_validation >= n:
+            if n_test > 1:
+                n_test -= 1
+            else:
+                n_validation -= 1
+        n_train = n - n_validation - n_test
+        train[user_id] = {item for _, item in events[:n_train]}
+        validation[user_id] = {
+            item for _, item in events[n_train:n_train + n_validation]
+        }
+        test[user_id] = {item for _, item in events[n_train + n_validation:]}
+
+    return train, validation, test, {
+        "positive_user_movie_pairs": positive_pairs,
+        "eligible_users": len(train),
+        "excluded_users_fewer_than_three_positive_items": excluded_users,
+        "train_interactions": sum(map(len, train.values())),
+        "validation_interactions": sum(map(len, validation.values())),
+        "test_interactions": sum(map(len, test.values())),
+    }
+
+
+def sample_evaluation_users(user_ids, sample_size=2_000, seed=42):
+    """Return a deterministic uniform sample, or all users when below the limit."""
+    users = sorted(user_ids)
+    if sample_size <= 0:
+        raise ValueError("sample_size must be positive")
+    if len(users) <= sample_size:
+        return users
+    rng = np.random.default_rng(seed)
+    return sorted(rng.choice(users, size=sample_size, replace=False).tolist())
+
+
+def precision_at_k(recommended, relevant, k):
+    return len(set(recommended[:k]) & relevant) / k if k > 0 else 0.0
+
+
+def recall_at_k(recommended, relevant, k):
+    if not relevant or k <= 0:
+        return 0.0
+    return len(set(recommended[:k]) & relevant) / len(relevant)
+
+
+def ndcg_at_k(recommended, relevant, k):
+    if not relevant or k <= 0:
+        return 0.0
+    dcg = sum(
+        1.0 / math.log2(rank + 2)
+        for rank, item in enumerate(recommended[:k])
+        if item in relevant
+    )
+    ideal = min(len(relevant), k)
+    idcg = sum(1.0 / math.log2(rank + 2) for rank in range(ideal))
+    return dcg / idcg if idcg else 0.0
+
+
+def per_user_ranking_metrics(rankings, relevant_by_user, k):
+    """Return aligned per-user metrics for paired statistical comparisons."""
+    return {
+        user: {
+            "precision": precision_at_k(rankings.get(user, [])[:k], relevant, k),
+            "recall": recall_at_k(rankings.get(user, [])[:k], relevant, k),
+            "ndcg": ndcg_at_k(rankings.get(user, [])[:k], relevant, k),
+        }
+        for user, relevant in relevant_by_user.items() if relevant
+    }
+
+
+def bootstrap_mean_ci(values, seed=42, samples=1000, confidence=0.95):
+    """Percentile bootstrap confidence interval for a mean."""
+    values = np.asarray(list(values), dtype=float)
+    if not len(values):
+        return {"lower": 0.0, "upper": 0.0}
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(values), size=(samples, len(values)))
+    means = values[indices].mean(axis=1)
+    alpha = (1.0 - confidence) / 2.0
+    return {
+        "lower": round(float(np.quantile(means, alpha)), 6),
+        "upper": round(float(np.quantile(means, 1.0 - alpha)), 6),
+    }
+
+
+def paired_bootstrap_difference_ci(left, right, metric, seed=42, samples=1000):
+    """CI for left-minus-right using paired resampling of the same users."""
+    users = sorted(set(left) & set(right))
+    if not users:
+        return {"lower": 0.0, "upper": 0.0}
+    differences = [left[user][metric] - right[user][metric] for user in users]
+    return bootstrap_mean_ci(differences, seed=seed, samples=samples)
+
+
+def evaluate_rankings(rankings, relevant_by_user, candidate_catalog, ks, bootstrap_seed=42, include_ci=True, bootstrap_samples=1000):
+    users = [u for u, items in relevant_by_user.items() if items]
+    output = {}
+    for k in ks:
+        per_user = per_user_ranking_metrics(rankings, relevant_by_user, k)
+        rows = list(per_user.values())
+        recommended_union = {
+            item for user in users for item in rankings.get(user, [])[:k]
+        }
+        means = np.asarray([
+            [row["precision"], row["recall"], row["ndcg"]] for row in rows
+        ], dtype=float).mean(axis=0) if rows else np.zeros(3)
+        metrics = {
+            "precision": round(float(means[0]), 6),
+            "recall": round(float(means[1]), 6),
+            "ndcg": round(float(means[2]), 6),
+            "coverage": round(len(recommended_union) / len(candidate_catalog), 6)
+            if candidate_catalog else 0.0,
+            "users_evaluated": len(users),
+        }
+        if include_ci:
+            metrics.update({
+                "precision_ci95": bootstrap_mean_ci(
+                    (row["precision"] for row in rows), seed=bootstrap_seed + k, samples=bootstrap_samples
+                ),
+                "recall_ci95": bootstrap_mean_ci(
+                    (row["recall"] for row in rows), seed=bootstrap_seed + 100 + k, samples=bootstrap_samples
+                ),
+                "ndcg_ci95": bootstrap_mean_ci(
+                    (row["ndcg"] for row in rows), seed=bootstrap_seed + 200 + k, samples=bootstrap_samples
+                ),
+            })
+        output[str(k)] = metrics
+    return output
+
+
+def intra_list_diversity(recommended, genres_by_item):
+    """Mean pairwise Jaccard distance for recommendations with known genres."""
+    items = list(dict.fromkeys(recommended))
+    distances = []
+    for index, left in enumerate(items):
+        left_genres = set(genres_by_item.get(left, ()))
+        if not left_genres:
+            continue
+        for right in items[index + 1:]:
+            right_genres = set(genres_by_item.get(right, ()))
+            if not right_genres:
+                continue
+            union = left_genres | right_genres
+            similarity = len(left_genres & right_genres) / len(union) if union else 0.0
+            distances.append(1.0 - similarity)
+    return float(np.mean(distances)) if distances else 0.0
+
+
+def item_novelty(item_id, item_counts, total_interactions, catalog_size):
+    """Self-information in bits using smoothed training-only interaction frequency."""
+    denominator = total_interactions + catalog_size
+    if denominator <= 0:
+        return 0.0
+    probability = (item_counts.get(item_id, 0) + 1) / denominator
+    return -math.log2(probability)
+
+
+def evaluate_diversity_novelty(
+    rankings, candidate_users, genres_by_item, item_counts,
+    total_interactions, catalog_size, ks, bootstrap_seed=42,
+    bootstrap_samples=1000,
+):
+    """Macro-average intra-list diversity and training-only novelty by cutoff."""
+    output = {}
+    for k in ks:
+        diversity_values = []
+        novelty_values = []
+        for user in candidate_users:
+            recommended = rankings.get(user, [])[:k]
+            diversity_values.append(intra_list_diversity(recommended, genres_by_item))
+            novelty_values.append(
+                float(np.mean([
+                    item_novelty(item, item_counts, total_interactions, catalog_size)
+                    for item in recommended
+                ])) if recommended else 0.0
+            )
+        output[str(k)] = {
+            "intra_list_diversity": round(float(np.mean(diversity_values)), 6) if diversity_values else 0.0,
+            "novelty_bits": round(float(np.mean(novelty_values)), 6) if novelty_values else 0.0,
+            "intra_list_diversity_ci95": bootstrap_mean_ci(
+                diversity_values, seed=bootstrap_seed + 400 + k, samples=bootstrap_samples
+            ),
+            "novelty_bits_ci95": bootstrap_mean_ci(
+                novelty_values, seed=bootstrap_seed + 500 + k, samples=bootstrap_samples
+            ),
+            "users_evaluated": len(candidate_users),
+        }
+    return output
+
+
+def _fuse_signal_subset(signal_rankings, weights, top_k, users, excluded=()):
+    """Fuse production signals while allowing controlled one-signal ablations."""
+    rankings = {}
+    for user in users:
+        candidates = {
+            "content": signal_rankings["content"].get(user, []),
+            "collaborative": signal_rankings["collaborative"].get(user, []),
+            "explicit_preferences": signal_rankings["explicit_preferences"].get(user, []),
+            "popularity": signal_rankings["global_popularity"].get(user, []),
+        }
+        selected = {
+            name: values for name, values in candidates.items()
+            if name not in excluded
+        }
+        selected_weights = {
+            name: weight for name, weight in weights.items()
+            if name not in excluded
+        }
+        rankings[user] = reciprocal_rank_fusion(
+            selected, weights=selected_weights, top_k=top_k
+        )
+    return rankings
+
+
+def evaluate_signal_diagnostics(
+    signal_rankings, weights, relevant_by_user, candidate_catalog, ks,
+    users, candidate_k=100, bootstrap_seed=42, bootstrap_samples=1000,
+):
+    """Measure candidate overlap, candidate recall, ablations and CF retention.
+
+    This is diagnostic reporting only: it does not tune weights or select a
+    production configuration. Validation diagnostics inform decisions; test
+    diagnostics are descriptive and must not be used to retune the system.
+    """
+    names = ("content", "collaborative", "explicit_preferences", "global_popularity")
+    per_user_sets = {
+        name: {
+            user: set(signal_rankings[name].get(user, [])[:candidate_k])
+            for user in users
+        }
+        for name in names
+    }
+
+    overlap = {}
+    for left in names:
+        overlap[left] = {}
+        for right in names:
+            values = []
+            for user in users:
+                a, b = per_user_sets[left][user], per_user_sets[right][user]
+                union = a | b
+                values.append(len(a & b) / len(union) if union else 0.0)
+            overlap[left][right] = round(float(np.mean(values)), 6) if values else 0.0
+
+    candidate_recall = {}
+    unique_relevant_contributions = {}
+    for name in names:
+        values = []
+        relevant_pairs = set()
+        for user in users:
+            relevant = set(relevant_by_user.get(user, set()))
+            candidates = per_user_sets[name][user]
+            if relevant:
+                values.append(len(candidates & relevant) / len(relevant))
+                relevant_pairs.update((user, item) for item in candidates & relevant)
+        other_names = [other for other in names if other != name]
+        unique_pairs = set()
+        for user in users:
+            relevant = set(relevant_by_user.get(user, set()))
+            other_candidates = set().union(
+                *(per_user_sets[other][user] for other in other_names)
+            )
+            unique_pairs.update(
+                (user, item)
+                for item in (per_user_sets[name][user] - other_candidates) & relevant
+            )
+        unique_relevant_contributions[name] = len(unique_pairs)
+        candidate_recall[name] = {
+            "recall": round(float(np.mean(values)), 6) if values else 0.0,
+            "recall_ci95": bootstrap_mean_ci(
+                values, seed=bootstrap_seed + 10 + names.index(name),
+                samples=bootstrap_samples,
+            ),
+            "relevant_candidates_retrieved": len(relevant_pairs),
+        }
+
+    union_values = []
+    for user in users:
+        relevant = set(relevant_by_user.get(user, set()))
+        union = set().union(*(per_user_sets[name][user] for name in names))
+        if relevant:
+            union_values.append(len(union & relevant) / len(relevant))
+    candidate_recall["union"] = {
+        "recall": round(float(np.mean(union_values)), 6) if union_values else 0.0,
+        "recall_ci95": bootstrap_mean_ci(
+            union_values, seed=bootstrap_seed + 20, samples=bootstrap_samples
+        ),
+    }
+
+    full = _fuse_signal_subset(
+        signal_rankings, weights, max(ks) * 10, users
+    )
+    full_metrics = evaluate_rankings(
+        full, relevant_by_user, candidate_catalog, ks,
+        bootstrap_seed=bootstrap_seed, bootstrap_samples=bootstrap_samples,
+    )
+    ablations = {}
+    for name in names:
+        omitted = "popularity" if name == "global_popularity" else name
+        ablated = _fuse_signal_subset(
+            signal_rankings, weights, max(ks) * 10, users, excluded={omitted}
+        )
+        ablated_metrics = evaluate_rankings(
+            ablated, relevant_by_user, candidate_catalog, ks,
+            bootstrap_seed=bootstrap_seed + 30 + names.index(name),
+            bootstrap_samples=bootstrap_samples,
+        )
+        comparisons = {}
+        for k in ks:
+            full_user = per_user_ranking_metrics(full, relevant_by_user, k)
+            ablated_user = per_user_ranking_metrics(ablated, relevant_by_user, k)
+            comparisons[str(k)] = {
+                metric: paired_bootstrap_difference_ci(
+                    full_user, ablated_user, metric,
+                    seed=bootstrap_seed + 100 + k + names.index(name) * 10 + offset,
+                    samples=bootstrap_samples,
+                )
+                for offset, metric in enumerate(("precision", "recall", "ndcg"))
+            }
+        ablations[name] = {
+            "metrics_without_signal": ablated_metrics,
+            "paired_full_minus_ablated_ci95": comparisons,
+        }
+
+    retention = {}
+    for k in ks:
+        per_user = []
+        for user in users:
+            cf = signal_rankings["collaborative"].get(user, [])[:k]
+            final = set(full.get(user, [])[:k])
+            if cf:
+                per_user.append(len(set(cf) & final) / len(set(cf)))
+        retention[str(k)] = {
+            "mean_fraction_of_top_cf_candidates_retained_in_hybrid_top_k":
+                round(float(np.mean(per_user)), 6) if per_user else 0.0,
+            "ci95": bootstrap_mean_ci(
+                per_user, seed=bootstrap_seed + 200 + k,
+                samples=bootstrap_samples,
+            ),
+            "users_evaluated": len(per_user),
+        }
+
+    return {
+        "candidate_cutoff": candidate_k,
+        "candidate_recall": candidate_recall,
+        "unique_relevant_candidate_contributions": unique_relevant_contributions,
+        "pairwise_candidate_overlap_jaccard": overlap,
+        "ablation": {
+            "full_hybrid_metrics": full_metrics,
+            "without_each_signal": ablations,
+        },
+        "collaborative_rank_retention": retention,
+        "interpretation": (
+            "Ablation differences are full hybrid minus the ablated model. "
+            "Positive values favor the full hybrid. Candidate recall measures "
+            "retrieval before fusion. CF retention measures the fraction of "
+            "top-K CF candidates that remain in the final hybrid top-K."
+        ),
+    }
+
+
+def _normalize_rows(matrix):
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    return matrix / np.maximum(norms, 1e-12)
+
+
+def eligible_als_training_population(
+    train, min_users=5, min_interactions_per_user=3
+):
+    """Mirror production ALS eligibility gates using training interactions only.
+
+    Users outside the ALS cohort can still receive content, genre, and
+    popularity rankings; their collaborative candidate list is empty.
+    """
+    if min_users < 1 or min_interactions_per_user < 1:
+        raise ValueError("ALS eligibility thresholds must be positive")
+    eligible = {
+        user: set(items)
+        for user, items in train.items()
+        if len(set(items)) >= min_interactions_per_user
+    }
+    return eligible if len(eligible) >= min_users else {}
+
+
+def select_ranking_users(train, ranking_users=None):
+    """Select users to score without changing the training population."""
+    users = sorted(train) if ranking_users is None else sorted(set(ranking_users))
+    missing = set(users) - set(train)
+    if missing:
+        raise ValueError(f"ranking_users contains {len(missing)} users absent from train")
+    return users
+
+
+def rank_content_by_min_l2(embeddings, ordered_ids, watched_ids, candidate_limit, neighbors_per_watched):
+    """Mirror production: per-watched-item L2 neighbors merged by minimum distance."""
+    import faiss
+
+    if candidate_limit <= 0 or neighbors_per_watched <= 0:
+        return []
+    ids = [int(item) for item in ordered_ids]
+    if len(ids) != len(embeddings):
+        raise ValueError("Embedding rows must align with ordered_ids")
+    positions = {item: idx for idx, item in enumerate(ids)}
+    watched = sorted(set(watched_ids) & set(positions))
+    if not watched:
+        return []
+
+    vectors = np.asarray(embeddings, dtype=np.float32)
+    if vectors.ndim != 2 or not np.isfinite(vectors).all():
+        raise ValueError("Embeddings must be a finite 2D matrix")
+    index = faiss.IndexFlatL2(int(vectors.shape[1]))
+    index.add(vectors)
+    query_vectors = vectors[[positions[item] for item in watched]]
+    neighbor_count = min(len(ids), neighbors_per_watched)
+    distances, neighbor_positions = index.search(query_vectors, neighbor_count)
+
+    best_distance = {}
+    for distance_row, position_row in zip(distances, neighbor_positions):
+        for distance, position in zip(distance_row, position_row):
+            if position < 0 or position >= len(ids):
+                continue
+            item = ids[int(position)]
+            if item in watched:
+                continue
+            value = float(distance)
+            if item not in best_distance or value < best_distance[item]:
+                best_distance[item] = value
+    return sorted(best_distance, key=lambda item: (best_distance[item], item))[:candidate_limit]
+
+
+def build_signal_rankings(
+    db, train, catalog_movies, ks_max, als_factors=64, seed=42,
+    ranking_users=None, als_iterations=20, embedding_batch_size=64,
+):
+    """Fit signals on all training users; materialize rankings only for selected users."""
+    catalog_ids = {int(movie.tmdb_id) for movie in catalog_movies}
+    movies = {int(movie.tmdb_id): movie for movie in catalog_movies}
+    train = {u: (items & catalog_ids) for u, items in train.items()}
+    train = {u: items for u, items in train.items() if items}
+
+    item_counts = Counter(item for items in train.values() for item in items)
+    # Match production's global fallback: TMDB popularity, then vote average.
+    global_popularity_order = sorted(
+        catalog_ids,
+        key=lambda item: (
+            float(movies[item].popularity or 0),
+            float(movies[item].vote_average or 0),
+            item,
+        ),
+        reverse=True,
+    )
+    # Keep the train-interaction popularity baseline separate for diagnostics.
+    training_popularity_order = sorted(
+        catalog_ids,
+        key=lambda item: (
+            item_counts[item],
+            float(movies[item].popularity or 0),
+            item,
+        ),
+        reverse=True,
+    )
+
+    from sentence_transformers import SentenceTransformer
+    encoder = SentenceTransformer("all-MiniLM-L6-v2")
+    ordered_ids = sorted(catalog_ids)
+    texts = [
+        f"Title: {movies[item].title}\nOverview: {movies[item].overview or ''}\n"
+        f"Language: {movies[item].original_language or ''}"
+        for item in ordered_ids
+    ]
+    # Raw vectors match the production FAISS IndexFlatL2 artifact.
+    embeddings = encoder.encode(
+        texts, batch_size=embedding_batch_size, show_progress_bar=True,
+        convert_to_numpy=True, normalize_embeddings=False,
+    ).astype("float32")
+    cosine_embeddings = _normalize_rows(embeddings)
+    item_pos = {item: idx for idx, item in enumerate(ordered_ids)}
+
+    # Production ALS trains only when >=5 users each have >=3 distinct
+    # watched movies. Apply the same gate to the training partition, not
+    # validation/test interactions.
+    als_train = eligible_als_training_population(train)
+    als_users = sorted(als_train)
+    als_items = sorted(set().union(*als_train.values())) if als_users else []
+    user_pos = {user: idx for idx, user in enumerate(als_users)}
+    als_item_pos = {item: idx for idx, item in enumerate(als_items)}
+    rows, cols = [], []
+    for user, items in als_train.items():
+        for item in items:
+            rows.append(user_pos[user])
+            cols.append(als_item_pos[item])
+    matrix = csr_matrix(
+        # One latest positive MovieLens rating is treated as one implicit event.
+        # Production confidence is 1 + 2 * watch_count, hence 3.0 for one event.
+        (np.full(len(rows), 3.0, dtype=np.float32), (rows, cols)),
+        shape=(len(als_users), len(als_items)),
+    )
+
+    als = None
+    if len(als_users) >= 5 and len(als_items) >= 2 and matrix.nnz:
+        als = AlternatingLeastSquares(
+            factors=als_factors, regularization=0.05, iterations=als_iterations,
+            random_state=seed, num_threads=1,
+        )
+        # Prevent nested BLAS/OpenMP pools from oversubscribing CPU threads.
+        with threadpool_limits(limits=1):
+            als.fit(matrix)
+
+    genre_rows = db.query(Movie.tmdb_id, MovieGenre.genre_id).join(
+        MovieGenre, MovieGenre.movie_id == Movie.id
+    ).filter(Movie.tmdb_id.in_(catalog_ids)).all()
+    genres_by_item = defaultdict(set)
+    for tmdb_id, genre_id in genre_rows:
+        genres_by_item[int(tmdb_id)].add(genre_id)
+
+    signal_names = (
+        "global_popularity", "training_popularity", "personalized_popularity",
+        "content", "cosine_profile_content", "collaborative",
+        "explicit_preferences",
+    )
+    signals = {name: {} for name in signal_names}
+    candidate_limit = min(len(catalog_ids), max(ks_max * 10, 100))
+
+    users_to_rank = select_ranking_users(train, ranking_users)
+
+    for user in users_to_rank:
+        watched = train[user]
+        unseen = catalog_ids - watched
+        global_pop = [i for i in global_popularity_order if i in unseen][:candidate_limit]
+        training_pop = [i for i in training_popularity_order if i in unseen][:candidate_limit]
+
+        # Personalized popularity: training interaction popularity, boosted
+        # by overlap with this user's training-derived genre profile.
+        genre_counts = Counter()
+        for item in watched:
+            genre_counts.update(genres_by_item.get(item, set()))
+        preferred = set(genre_counts)
+        def personalized_score(item):
+            item_genres = genres_by_item.get(item, set())
+            affinity = sum(genre_counts[g] for g in item_genres)
+            return (affinity, item_counts[item], float(movies[item].popularity or 0), item)
+        personalized_pop = sorted(
+            unseen, key=personalized_score, reverse=True
+        )[:candidate_limit]
+
+        positions = [item_pos[item] for item in watched]
+        profile = _normalize_rows(
+            cosine_embeddings[positions].mean(axis=0, keepdims=True)
+        )[0]
+        content_scores = cosine_embeddings @ profile
+        cosine_profile = sorted(
+            unseen,
+            key=lambda item: (float(content_scores[item_pos[item]]), item),
+            reverse=True,
+        )[:candidate_limit]
+        # Production default top_k=100 queries up to 300 neighbors per watched item.
+        content = rank_content_by_min_l2(
+            embeddings, ordered_ids, watched, candidate_limit,
+            neighbors_per_watched=max(ks_max * 30, 50),
+        )
+
+        collaborative = []
+        if als is not None and user in user_pos:
+            with threadpool_limits(limits=1):
+                user_vector = als.user_factors[user_pos[user]]
+                item_scores = als.item_factors @ user_vector
+            collaborative = sorted(
+                (item for item in als_items if item not in watched),
+                key=lambda item: (float(item_scores[als_item_pos[item]]), item),
+                reverse=True,
+            )[:candidate_limit]
+
+        # Offline analogue of production _rank_by_genre_affinity: score by
+        # training-derived genre affinity, then break ties by catalog
+        # popularity and vote average. MovieLens positive interactions act
+        # as implicit watches; ratings/watchlist feedback are not simulated.
+        explicit_preferences = [
+            item for item in unseen
+            if sum(genre_counts[g] for g in genres_by_item.get(item, set())) > 0
+        ]
+        explicit_preferences.sort(
+            key=lambda item: (
+                sum(genre_counts[g] for g in genres_by_item[item]),
+                max(float(movies[item].popularity or 0), 0.0),
+                float(movies[item].vote_average or 0),
+            ),
+            reverse=True,
+        )
+        signals["global_popularity"][user] = global_pop
+        signals["training_popularity"][user] = training_pop
+        signals["personalized_popularity"][user] = personalized_pop
+        signals["content"][user] = content
+        signals["cosine_profile_content"][user] = cosine_profile
+        signals["collaborative"][user] = collaborative
+        signals["explicit_preferences"][user] = explicit_preferences[:candidate_limit]
+    return signals
+
+
+def fuse_hybrid(signal_rankings, weights, top_k, users=None):
+    hybrid = {}
+    selected_users = (
+        users if users is not None else signal_rankings["content"].keys()
+    )
+    for user in selected_users:
+        signals = signal_rankings["content"].get(user, [])
+        hybrid[user] = reciprocal_rank_fusion(
+            {
+                "content": signals,
+                "collaborative": signal_rankings["collaborative"].get(user, []),
+                "explicit_preferences": signal_rankings["explicit_preferences"].get(user, []),
+                "popularity": signal_rankings["global_popularity"].get(user, []),
+            },
+            weights=weights,
+            top_k=top_k,
+        )
+    return hybrid
+
+
+def tune_hybrid_weights(signal_rankings, validation, ks, candidate_catalog, seed=42, tuning_user_limit=TUNING_USER_SAMPLE_SIZE, weight_grid=WEIGHT_GRID):
+    """Select RRF weights on validation NDCG@10 (or largest available K)."""
+    objective_k = 10 if 10 in ks else max(ks)
+    # Tuning over every validation user for every grid point is needlessly
+    # expensive at MovieLens scale. Use a deterministic, sorted user sample;
+    # final validation/test reporting still uses every eligible user.
+    available_users = sorted(validation)
+    rng = np.random.default_rng(seed)
+    if len(available_users) > tuning_user_limit:
+        sampled_users = sorted(
+            rng.choice(available_users, size=tuning_user_limit, replace=False).tolist()
+        )
+    else:
+        sampled_users = available_users
+    tuning_validation = {u: validation[u] for u in sampled_users}
+    best = None
+    tested = 0
+    for values in itertools.product(weight_grid, repeat=4):
+        weights = dict(zip(
+            ("content", "collaborative", "explicit_preferences", "popularity"), values
+        ))
+        candidate = fuse_hybrid(
+            signal_rankings, weights, max(ks) * 10, users=sampled_users
+        )
+        metrics = evaluate_rankings(candidate, tuning_validation, candidate_catalog, [objective_k], include_ci=False)
+        score = metrics[str(objective_k)]["ndcg"]
+        tested += 1
+        # Deterministic tie-break: NDCG, precision, then prefer lower total weight.
+        precision = metrics[str(objective_k)]["precision"]
+        key = (score, precision, -sum(values))
+        if best is None or key > best["key"]:
+            best = {"key": key, "weights": weights, "metrics": metrics}
+    return {
+        "objective": f"validation_ndcg_at_{objective_k}",
+        "objective_score": best["key"][0],
+        "validation_precision_at_objective_k": best["key"][1],
+        "weights": best["weights"],
+        "weight_grid": list(weight_grid),
+        "tuning_user_limit": tuning_user_limit,
+        "configurations_tested": tested,
+        "tuning_users_sampled": len(sampled_users),
+        "tuning_user_sample_method": "seeded uniform sample without replacement",
+        "tuning_seed": seed,
+        "validation_metrics_at_objective_k": best["metrics"],
+    }
+
+
+def run(args):
+    db = SessionLocal()
+    try:
+        catalog_movies = db.query(Movie).filter(Movie.tmdb_id.isnot(None)).all()
+        catalog_by_id = {int(m.tmdb_id): m for m in catalog_movies}
+        catalog_ids = set(catalog_by_id)
+        if not catalog_ids:
+            raise RuntimeError("DeepCine catalog is empty; import movies first.")
+
+        mapping = load_movie_mapping(args.links_path, catalog_ids)
+        if not mapping:
+            raise RuntimeError("No MovieLens/TMDB IDs overlap with the DeepCine catalog.")
+
+        latest, scan_stats = load_latest_ratings(
+            args.ratings_path, mapping, chunksize=args.chunksize
+        )
+        train, validation, test, split_stats = build_temporal_split(
+            latest, positive_threshold=args.positive_threshold,
+            train_ratio=args.train_ratio,
+            validation_ratio=args.validation_ratio,
+            test_ratio=args.test_ratio,
+        )
+        overlap_ids = set(mapping.values())
+        eligible = {
+            user for user in train.keys() & validation.keys() & test.keys()
+            if train[user] & overlap_ids
+            and validation[user] & overlap_ids
+            and test[user] & overlap_ids
+        }
+        if not eligible:
+            raise RuntimeError(
+                "No eligible users after overlap filtering. Expand the catalog "
+                "or check the positive threshold and MovieLens mapping."
+            )
+
+        eligible_user_count = len(eligible)
+        validation_users = sample_evaluation_users(
+            eligible, sample_size=args.evaluation_users, seed=args.validation_seed
+        )
+        test_users = sample_evaluation_users(
+            eligible, sample_size=args.evaluation_users, seed=args.test_seed
+        )
+        # Independently sample validation and test cohorts. Rank their union;
+        # fit ALS and train-derived signals once on the full training population.
+        ranking_users = sorted(set(validation_users) | set(test_users))
+        validation_sample = {u: validation[u] & overlap_ids for u in validation_users}
+        test_sample = {u: test[u] & overlap_ids for u in test_users}
+
+        overlap_movies = [catalog_by_id[item] for item in sorted(overlap_ids)]
+        signals = build_signal_rankings(
+            db, train, overlap_movies, max(args.ks),
+            als_factors=args.als_factors, seed=args.als_seed,
+            ranking_users=ranking_users, als_iterations=args.als_iterations,
+            embedding_batch_size=args.embedding_batch_size,
+        )
+        # Select weights using validation labels only, then freeze before test.
+        tuning = tune_hybrid_weights(
+            signals, validation_sample, args.ks, overlap_ids, seed=args.tuning_seed,
+            tuning_user_limit=args.tuning_users, weight_grid=args.weight_grid,
+        )
+        hybrid = fuse_hybrid(
+            signals, tuning["weights"], max(args.ks) * 10, users=ranking_users
+        )
+        # Compare MMR against identical tuned RRF candidates and weights.
+        genre_rows = db.query(Movie.tmdb_id, MovieGenre.genre_id).join(
+            MovieGenre, MovieGenre.movie_id == Movie.id
+        ).filter(Movie.tmdb_id.in_(overlap_ids)).all()
+        genres_by_item = defaultdict(set)
+        for tmdb_id, genre_id in genre_rows:
+            genres_by_item[int(tmdb_id)].add(genre_id)
+        hybrid_mmr = {
+            user: diversify_by_genre(
+                ranking, genres_by_item, top_k=max(args.ks) * 10,
+                relevance_weight=args.mmr_relevance_weight,
+            )
+            for user, ranking in hybrid.items()
+        }
+        train_item_counts = Counter(item for items in train.values() for item in items)
+        total_train_interactions = sum(train_item_counts.values())
+        all_rankings = {
+            "global_popularity": signals["global_popularity"],
+            "training_popularity": signals["training_popularity"],
+            "personalized_popularity": signals["personalized_popularity"],
+            "content": signals["content"],
+            "cosine_profile_content": signals["cosine_profile_content"],
+            "collaborative": signals["collaborative"],
+            "hybrid_tuned": hybrid,
+            "hybrid_tuned_mmr": hybrid_mmr,
+            "hybrid_previous_weights": fuse_hybrid(
+                signals, DEFAULT_WEIGHTS, max(args.ks) * 10, users=ranking_users
+            ),
+            "hybrid_production_weights": fuse_hybrid(
+                signals, PRODUCTION_WEIGHTS, max(args.ks) * 10, users=ranking_users
+            ),
+        }
+        validation_rankings = {
+            name: {u: rankings[u] for u in validation_users}
+            for name, rankings in all_rankings.items()
+        }
+        test_rankings = {
+            name: {u: rankings[u] for u in test_users}
+            for name, rankings in all_rankings.items()
+        }
+        validation_metrics = {
+            name: evaluate_rankings(
+                rankings, validation_sample, overlap_ids, args.ks,
+                bootstrap_seed=args.bootstrap_seed, bootstrap_samples=args.bootstrap_samples,
+            )
+            for name, rankings in validation_rankings.items()
+        }
+        test_metrics = {
+            name: evaluate_rankings(
+                rankings, test_sample, overlap_ids, args.ks,
+                bootstrap_seed=args.bootstrap_seed,
+                bootstrap_samples=args.bootstrap_samples,
+            )
+            for name, rankings in test_rankings.items()
+        }
+        # Run diagnostics with frozen validation-selected weights. Test diagnostics
+        # are descriptive only and must never be used to retune these weights.
+        signal_diagnostics = {
+            "validation": evaluate_signal_diagnostics(
+                signals, tuning["weights"], validation_sample, overlap_ids,
+                args.ks, validation_users, candidate_k=100,
+                bootstrap_seed=args.bootstrap_seed + 700,
+                bootstrap_samples=args.bootstrap_samples,
+            ),
+            "test": evaluate_signal_diagnostics(
+                signals, tuning["weights"], test_sample, overlap_ids,
+                args.ks, test_users, candidate_k=100,
+                bootstrap_seed=args.bootstrap_seed + 800,
+                bootstrap_samples=args.bootstrap_samples,
+            ),
+        }
+        diversity_novelty_metrics = {
+            "validation": {
+                name: evaluate_diversity_novelty(
+                    {u: rankings[u] for u in validation_users},
+                    validation_users, genres_by_item, train_item_counts,
+                    total_train_interactions, len(overlap_ids), args.ks,
+                    bootstrap_seed=args.bootstrap_seed,
+                    bootstrap_samples=args.bootstrap_samples,
+                )
+                for name, rankings in {
+                    "hybrid_tuned": hybrid, "hybrid_tuned_mmr": hybrid_mmr,
+                }.items()
+            },
+            "test": {
+                name: evaluate_diversity_novelty(
+                    {u: rankings[u] for u in test_users},
+                    test_users, genres_by_item, train_item_counts,
+                    total_train_interactions, len(overlap_ids), args.ks,
+                    bootstrap_seed=args.bootstrap_seed + 1,
+                    bootstrap_samples=args.bootstrap_samples,
+                )
+                for name, rankings in {
+                    "hybrid_tuned": hybrid, "hybrid_tuned_mmr": hybrid_mmr,
+                }.items()
+            },
+        }
+        paired_comparisons = {}
+        paired_mmr_comparisons = {}
+        for k in args.ks:
+            hybrid_user = per_user_ranking_metrics(
+                test_rankings["hybrid_tuned"], test_sample, k
+            )
+            popularity_user = per_user_ranking_metrics(
+                test_rankings["global_popularity"], test_sample, k
+            )
+            paired_comparisons[str(k)] = {
+                metric: paired_bootstrap_difference_ci(
+                    hybrid_user, popularity_user, metric,
+                    seed=args.bootstrap_seed + 300 + k + offset,
+                    samples=args.bootstrap_samples,
+                )
+                for offset, metric in enumerate(("precision", "recall", "ndcg"))
+            }
+            mmr_user = per_user_ranking_metrics(
+                test_rankings["hybrid_tuned_mmr"], test_sample, k
+            )
+            paired_mmr_comparisons[str(k)] = {
+                metric: paired_bootstrap_difference_ci(
+                    mmr_user, hybrid_user, metric,
+                    seed=args.bootstrap_seed + 600 + k + offset,
+                    samples=args.bootstrap_samples,
+                )
+                for offset, metric in enumerate(("precision", "recall", "ndcg"))
+            }
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "generated_at_utc": timestamp,
+            "dataset": {
+                "ratings_file": str(args.ratings_path),
+                "links_file": str(args.links_path),
+                "positive_rating_threshold": args.positive_threshold,
+                "chunksize": args.chunksize,
+            },
+            "catalog": {
+                "deepcine_catalog_movies": len(catalog_ids),
+                "movielens_movies_with_tmdb_id_in_catalog": len(overlap_ids),
+                "catalog_overlap_fraction": round(len(overlap_ids) / len(catalog_ids), 6),
+                "candidate_catalog_size": len(overlap_ids),
+            },
+            "scan": scan_stats,
+            "split": {
+                "method": "per-user chronological 3-way split after latest-rating deduplication",
+                "train_ratio": args.train_ratio,
+                "validation_ratio": args.validation_ratio,
+                "test_ratio": args.test_ratio,
+                **split_stats,
+                "eligible_users_all_three_partitions": eligible_user_count,
+                "validation_users_sampled": len(validation_users),
+                "test_users_sampled": len(test_users),
+                "evaluation_user_sample_size_requested_per_cohort": args.evaluation_users,
+                "evaluation_user_sample_method": "independent seeded uniform samples without replacement",
+                "validation_seed": args.validation_seed,
+                "test_seed": args.test_seed,
+                "model_fit_train_users": len(train),
+                "model_fit_train_interactions": sum(map(len, train.values())),
+                "all_validation_interactions": sum(map(len, validation.values())),
+                "all_test_interactions": sum(map(len, test.values())),
+            },
+            "reproducibility": {
+                "validation_seed": args.validation_seed,
+                "test_seed": args.test_seed,
+                "als_seed": args.als_seed,
+                "tuning_seed": args.tuning_seed,
+                "bootstrap_seed": args.bootstrap_seed,
+                "als_factors": args.als_factors,
+                "als_iterations": args.als_iterations,
+                "embedding_batch_size": args.embedding_batch_size,
+                "bootstrap_samples": args.bootstrap_samples,
+                "profile": args.profile,
+                "als_regularization": 0.05,
+                "blas_thread_limit": 1,
+            },
+            "hybrid_tuning": tuning,
+            "als_training_population": {
+                "eligible_users": len(eligible_als_training_population(train)),
+                "minimum_users": 5,
+                "minimum_distinct_training_interactions_per_user": 3,
+                "training_interactions_used": sum(
+                    len(items)
+                    for items in eligible_als_training_population(train).values()
+                ),
+                "users_without_als_factors_receive_empty_collaborative_rankings": True,
+            },
+            "evaluation": {
+                "metrics": [
+                    "precision", "recall", "ndcg", "coverage",
+                    "intra_list_diversity", "novelty_bits",
+                ],
+                "diversity_definition": "mean pairwise Jaccard distance over genre sets; pairs with missing genre metadata are skipped",
+                "novelty_definition": "mean self-information in bits from smoothed item frequency in training interactions only",
+                "mmr_relevance_weight": args.mmr_relevance_weight,
+                "ks": args.ks,
+                "averaging": "macro average over each independently sampled cohort",
+                "coverage_denominator": "MovieLens/DeepCine overlapping catalog",
+                "model_fit_data": "full eligible training partition",
+                "weight_selection_data": "validation partition only",
+                "final_reporting_data": "held-out test partition only",
+                "validation_population": "independent seeded uniform sample of eligible users",
+                "test_population": "independent seeded uniform sample of eligible users",
+                "ranking_population": "union of validation and test cohorts",
+                "training_population": "all eligible users",
+                "validation_users_sampled": len(validation_users),
+                "test_users_sampled": len(test_users),
+                "objective": tuning["objective"],
+                "confidence_intervals": f"95% percentile bootstrap over sampled users; {args.bootstrap_samples} resamples",
+            },
+            "validation_metrics": validation_metrics,
+            "test_metrics": test_metrics,
+            "signal_diagnostics": signal_diagnostics,
+            "diversity_novelty_metrics": diversity_novelty_metrics,
+            "paired_test_difference_hybrid_minus_global_popularity_ci95": paired_comparisons,
+            "paired_test_difference_mmr_minus_rrf_ci95": paired_mmr_comparisons,
+            "limitations": [
+                "Results apply only to the MovieLens/DeepCine overlapping catalog, not the full DeepCine catalog.",
+                "Ratings >= threshold are implicit positives; this is not explicit rating prediction.",
+                "MovieLens users and interactions are external benchmark data, not production DeepCine users or watch history.",
+                "Per-user chronological splitting is not a global calendar-time split.",
+                "Offline explicit-preference ranking approximates production genre affinity using training-positive interactions and catalog popularity/vote-average tie-breaks; it does not simulate explicit ratings or watchlist feedback.",
+                "Production RRF weights are evaluated separately from validation-tuned weights; MovieLens positives are only an implicit-feedback approximation of production watch history.",
+                "The final test partition must not be used to select weights or model settings; test signal diagnostics are descriptive only.",
+                "MovieLens has one latest positive rating per user/movie pair in this protocol; it is treated as one implicit event with confidence 3.0 to match production's 1 + 2 * watch_count formula for one event. It cannot reproduce repeated-watch counts.",
+                "The benchmark's explicit-preference signal approximates production using training-positive genres and does not reproduce ratings or watchlist feedback.",
+                "The training-interaction popularity baseline is reported separately; the hybrid popularity signal mirrors production's TMDB popularity and vote-average ordering.",
+                "Bootstrap intervals quantify uncertainty across sampled users for this run; repeated seeds are still required to assess run-to-run stability.",
+                "Validation and test metrics use independently seeded user cohorts; overlap is possible but their samples are not intentionally coupled.",
+                "Metrics are estimated on seeded uniform samples of eligible users, not the full eligible population.",
+                "Genre diversity is measured only for item pairs with genre metadata; missing metadata can bias the metric.",
+                "Novelty uses training interaction frequency as a proxy for popularity, not user-perceived novelty.",
+                "MMR relevance weight is a heuristic and is compared against identical tuned RRF candidates.",
+            ],
+        }
+
+        json_path = OUTPUT_DIR / f"movielens_phase5_{timestamp}.json"
+        json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        csv_path = OUTPUT_DIR / f"movielens_phase5_{timestamp}.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow([
+                "partition", "model", "k", "precision", "recall",
+                "ndcg", "coverage", "users_evaluated",
+            ])
+            for partition, all_models in (
+                ("validation", validation_metrics), ("test", test_metrics)
+            ):
+                for model, by_k in all_models.items():
+                    for k, values in by_k.items():
+                        writer.writerow([
+                            partition, model, k, values["precision"],
+                            values["recall"], values["ndcg"],
+                            values["coverage"], values["users_evaluated"],
+                        ])
+        print(json.dumps(payload, indent=2))
+        print(f"\nSaved JSON: {json_path}")
+        print(f"Saved CSV:  {csv_path}")
+    finally:
+        db.close()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--ratings-path", default="../datasets/movielens/ratings.csv")
+    parser.add_argument("--links-path", default="../datasets/movielens/links.csv")
+    parser.add_argument("--positive-threshold", type=float, default=4.0)
+    parser.add_argument("--mmr-relevance-weight", type=float, default=0.8,
+                        help="MMR relevance weight in [0, 1]; 1.0 preserves RRF order")
+    parser.add_argument("--train-ratio", type=float, default=0.6)
+    parser.add_argument("--validation-ratio", type=float, default=0.2)
+    parser.add_argument("--test-ratio", type=float, default=0.2)
+    parser.add_argument("--profile", choices=("quick", "full"), default="quick", help="quick is intended for 8 GB CPU-only laptops; full retains the larger benchmark settings")
+    parser.add_argument("--chunksize", type=int, default=None)
+    parser.add_argument("--ks", default="5,10,20")
+    parser.add_argument("--als-factors", type=int, default=None)
+    parser.add_argument("--als-iterations", type=int, default=None)
+    parser.add_argument("--embedding-batch-size", type=int, default=None)
+    parser.add_argument("--bootstrap-samples", type=int, default=None)
+    parser.add_argument("--tuning-users", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=42, help="legacy seed; fallback for validation, ALS, tuning, and bootstrap seeds")
+    parser.add_argument("--validation-seed", type=int, default=None)
+    parser.add_argument("--test-seed", type=int, default=None)
+    parser.add_argument("--als-seed", type=int, default=None)
+    parser.add_argument("--tuning-seed", type=int, default=None)
+    parser.add_argument("--bootstrap-seed", type=int, default=None)
+    parser.add_argument(
+        "--evaluation-users", type=int,
+        default=None,
+        help="maximum eligible users to evaluate (seeded uniform sample; default: 2000)",
+    )
+    args = parser.parse_args()
+    if args.profile == "quick":
+        defaults = {"chunksize": 50_000, "als_factors": 32, "als_iterations": 8,
+                    "embedding_batch_size": 16, "bootstrap_samples": 200,
+                    "tuning_users": QUICK_TUNING_USER_SAMPLE_SIZE,
+                    "evaluation_users": 100, "weight_grid": QUICK_WEIGHT_GRID}
+    else:
+        defaults = {"chunksize": 500_000, "als_factors": 64, "als_iterations": 20,
+                    "embedding_batch_size": 64, "bootstrap_samples": 1000,
+                    "tuning_users": TUNING_USER_SAMPLE_SIZE,
+                    "evaluation_users": DEFAULT_EVALUATION_USER_SAMPLE_SIZE,
+                    "weight_grid": WEIGHT_GRID}
+    for name, value in defaults.items():
+        if getattr(args, name, None) is None:
+            setattr(args, name, value)
+    args.validation_seed = args.seed if args.validation_seed is None else args.validation_seed
+    args.test_seed = args.seed + 1 if args.test_seed is None else args.test_seed
+    args.als_seed = args.seed if args.als_seed is None else args.als_seed
+    args.tuning_seed = args.seed if args.tuning_seed is None else args.tuning_seed
+    args.bootstrap_seed = args.seed if args.bootstrap_seed is None else args.bootstrap_seed
+    ratios = (args.train_ratio, args.validation_ratio, args.test_ratio)
+    if any(value <= 0 for value in ratios) or not math.isclose(sum(ratios), 1.0):
+        parser.error("train/validation/test ratios must be positive and sum to 1")
+    if (args.chunksize <= 0 or args.als_factors <= 0 or args.als_iterations <= 0
+            or args.embedding_batch_size <= 0 or args.bootstrap_samples <= 0
+            or args.tuning_users <= 0 or args.evaluation_users <= 0):
+        parser.error("chunksize, ALS factors/iterations, embedding batch size, bootstrap samples, tuning users, and evaluation-users must be positive")
+    args.ks = tuple(sorted({int(value) for value in args.ks.split(",")}))
+    if not args.ks or any(k <= 0 for k in args.ks):
+        parser.error("--ks must contain positive integers")
+    if not 0 <= args.positive_threshold <= 5:
+        parser.error("--positive-threshold must be between 0 and 5")
+    if not 0.0 <= args.mmr_relevance_weight <= 1.0:
+        parser.error("--mmr-relevance-weight must be between 0 and 1")
+    return args
+
+
+if __name__ == "__main__":
+    run(parse_args())
