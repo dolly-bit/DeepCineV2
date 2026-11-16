@@ -7,7 +7,8 @@ import MovieCard from "../components/home/MovieCard";
 import { discoverMovies,getPersonalizedRecommendations,getCollaborativeRecommendations,getUpcomingMovies } from "../services/movies";
 export default function MoviesListPage(){
   const location=useLocation();
-  const [mode,setMode]=useState(location.state?.mode||"recent");
+  const [mode,setMode]=useState(location.state?.mode||"trending");
+  useEffect(()=>{ if(location.state?.mode) setMode(location.state.mode); },[location.key,location.state?.mode]);
   const [movies,setMovies]=useState([]),[page,setPage]=useState(0),[loading,setLoading]=useState(true),[loadingMore,setLoadingMore]=useState(false),[hasMore,setHasMore]=useState(true),[error,setError]=useState("");
   useEffect(()=>{
     let cancelled=false;
@@ -60,7 +61,7 @@ export default function MoviesListPage(){
     finally{setLoadingMore(false);}
   }
   return <div className="dc-app-shell"><HomeSidebar/><main className="dc-app-main"><Navbar/><section className="dc-catalog-page">
-    <div className="dc-catalog-heading"><div><span className="dc-slider-eyebrow">THE DEEPCINE LIBRARY</span><h1>Movie Collections</h1><p>Browse trending, recently released, top-rated and upcoming films.</p></div><span className="dc-catalog-count">{movies.length.toLocaleString()} FILMS LOADED</span></div>
+    <div className="dc-catalog-heading"><div><span className="dc-slider-eyebrow">THE DEEPCINE LIBRARY</span><h1>Movie Collections</h1><p>Start with the most popular films, or explore top-rated, upcoming and recently added titles.</p></div><span className="dc-catalog-count">{movies.length.toLocaleString()} FILMS LOADED</span></div>
     <div className="dc-movie-collection-tabs" role="tablist" aria-label="Movie collections">
       <button type="button" role="tab" aria-selected={mode==="trending"} className={mode==="trending"?"active":""} onClick={()=>setMode("trending")}>1. Top Trending</button>
       <button type="button" role="tab" aria-selected={mode==="top-rated"} className={mode==="top-rated"?"active":""} onClick={()=>setMode("top-rated")}>2. Top Rated</button>
