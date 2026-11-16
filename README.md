@@ -202,14 +202,40 @@ DeepCineV2/
 - PostgreSQL.
 - TMDB API credentials for live movie-data features.
 
-There is no root-level Docker Compose file in this repository. Start PostgreSQL separately and make sure the database connection string points to a reachable database.
+The repository includes a Docker Compose configuration for **local PostgreSQL only**. The FastAPI backend and Vite frontend run directly on your host machine during development.
+
+### 1. Start the local PostgreSQL container
+
+From the repository root:
+
+~~~powershell
+docker compose up -d db
+docker compose ps
+docker compose logs db
+~~~
+
+Wait until the database health status is healthy. The Compose setup publishes PostgreSQL on host port **5433**, stores data in the named volume `deepcine_postgres_data`, and uses local-development credentials only.
+
+To stop the container without deleting database data:
+
+~~~powershell
+docker compose down
+~~~
+
+To permanently delete the local database and its data (destructive):
+
+~~~powershell
+docker compose down -v
+~~~
+
+Do not run the destructive command unless you intentionally want to reset your local database.
 
 ### 1. Clone the repository
 
 ~~~powershell
 git clone https://github.com/dolly-bit/DeepCineV2.git
 cd DeepCineV2
-git switch feature/deepcine-2.0
+git switch main
 ~~~
 
 ### 2. Set up the backend
@@ -240,7 +266,7 @@ The example URL expects PostgreSQL on port **5433**, with a database and role ma
 
 ### 3. Import catalog data and build content artifacts
 
-With PostgreSQL running, the backend virtual environment active, and TMDB credentials configured, run these commands from backend/:
+With the Docker PostgreSQL container healthy, the backend virtual environment active, and TMDB credentials configured, run these commands from backend/:
 
 ~~~powershell
 python import_genres.py
