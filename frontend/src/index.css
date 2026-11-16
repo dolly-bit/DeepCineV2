@@ -1981,3 +1981,86 @@ input.bg-zinc-900, .bg-zinc-900{
 .focus\:border-purple-500:focus{border-color:#ff555d!important}
 .bg-purple-500\/10{background-color:rgba(255,75,82,.1)!important}
 .hover\:bg-purple-500\/20:hover{background-color:rgba(255,75,82,.2)!important}
+
+
+/* Auth pages: compact single-viewport layout for login and signup. */
+.auth-page{
+  min-height:100svh !important;
+  height:100svh !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  padding:14px clamp(16px,4vw,58px) 10px !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+.auth-topbar{flex:0 0 auto !important;min-height:38px}
+.auth-layout{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  width:min(1160px,100%) !important;
+  margin:6px auto 8px !important;
+  grid-template-columns:minmax(0,1.05fr) minmax(360px,.78fr) !important;
+  align-items:center !important;
+  gap:clamp(24px,5vw,70px) !important;
+}
+.auth-story{padding:0 !important;min-width:0}
+.auth-kicker{padding:7px 10px !important;font-size:9px !important}
+.auth-overline{margin-top:24px !important;font-size:9px !important}
+.auth-story h1{font-size:clamp(48px,5.6vw,72px) !important;line-height:.94 !important;margin:10px 0 12px !important}
+.auth-description{font-size:13px !important;line-height:1.55 !important;max-width:460px !important}
+.poster-orbit{height:150px !important;margin-top:14px !important;transform:scale(.82);transform-origin:left top}
+.auth-story-foot{margin-top:-2px !important;font-size:10px !important}
+.auth-form-panel{padding:clamp(20px,2.4vw,32px) !important;border-radius:15px !important}
+.auth-form-heading h2{font-size:clamp(25px,2.5vw,32px) !important;margin:11px 0 6px !important}
+.auth-form-heading p{font-size:11px !important;line-height:1.5 !important}
+.auth-form{gap:8px !important;margin-top:18px !important}
+.auth-input-wrap{min-height:44px !important;padding:0 12px !important}
+.auth-label{font-size:10px !important}
+.auth-submit{min-height:45px !important;margin-top:7px !important}
+.auth-form-footer{margin-top:14px !important;padding-top:12px !important}
+.auth-legal{margin-top:10px !important;font-size:8px !important}
+.auth-bottom{flex:0 0 auto !important;padding-top:9px !important;font-size:7px !important}
+@media(max-height:760px) and (min-width:851px){
+  .auth-page{padding-top:9px !important;padding-bottom:7px !important}
+  .auth-layout{gap:28px !important}
+  .auth-overline{margin-top:15px !important}
+  .auth-story h1{font-size:clamp(43px,4.8vw,61px) !important;margin:8px 0 !important}
+  .auth-description{font-size:12px !important}
+  .poster-orbit{transform:scale(.68);height:125px !important;margin-top:8px !important}
+  .auth-form-panel{padding:18px 24px !important}
+  .auth-form{margin-top:12px !important;gap:7px !important}
+  .auth-input-wrap{min-height:40px !important}
+  .auth-form-footer{margin-top:10px !important;padding-top:9px !important}
+  .auth-legal{margin-top:7px !important}
+}
+@media(max-width:850px){
+  .auth-page{height:auto !important;min-height:100svh !important;padding:14px 18px 10px !important}
+  .auth-layout{flex:1 0 auto !important;grid-template-columns:1fr !important;gap:12px !important;max-width:540px !important;margin:12px auto !important;padding:0 !important}
+  .auth-story{padding:0 !important}
+  .auth-overline{margin-top:13px !important}
+  .auth-story h1{font-size:clamp(38px,8vw,54px) !important;margin:7px 0 !important}
+  .auth-description{font-size:11px !important;line-height:1.45 !important}
+  .poster-orbit{display:none !important}
+  .auth-story-foot{display:none !important}
+  .auth-form-panel{padding:19px !important}
+  .auth-form{margin-top:14px !important;gap:8px !important}
+  .auth-form-footer{margin-top:12px !important;padding-top:10px !important}
+  .auth-bottom{margin-top:auto !important}
+}
+@media(max-width:520px){
+  .auth-page{padding:11px 14px 8px !important}
+  .auth-back-link{font-size:9px !important}
+  .brand-lockup{font-size:12px !important}
+  .brand-mark{width:31px !important;height:31px !important}
+  .auth-layout{gap:9px !important;margin:9px auto !important}
+  .auth-kicker{padding:6px 9px !important;font-size:8px !important}
+  .auth-overline{font-size:8px !important;margin-top:10px !important}
+  .auth-story h1{font-size:36px !important;line-height:.95 !important}
+  .auth-description{font-size:10px !important;margin-top:5px !important}
+  .auth-form-panel{padding:16px !important}
+  .auth-form-heading h2{font-size:23px !important;margin:8px 0 5px !important}
+  .auth-form-heading p{font-size:10px !important}
+  .auth-input-wrap{min-height:41px !important}
+  .auth-submit{min-height:43px !important}
+  .auth-bottom{display:none !important}
+}
