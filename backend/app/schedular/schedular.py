@@ -5,11 +5,9 @@ from app.schedular.movie_updater import update_movies
 
 scheduler = BackgroundScheduler()
 
-# Daily at 3am (server local time): refreshes the movie catalog from
-# TMDB (new movies + updated ratings on existing ones) and rebuilds the
-# content-recommendation index - see movie_updater.py for the full
-# pipeline. BackgroundScheduler runs this in its own thread, so it never
-# blocks the app's request-handling event loop.
+# This job is opt-in at application startup. On free/sleeping hosts the API
+# process may be stopped for long periods, so an in-process scheduler cannot
+# guarantee execution and should be disabled there.
 scheduler.add_job(
     update_movies,
     trigger="cron",
