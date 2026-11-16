@@ -53,6 +53,7 @@ export default function Profile() {
               <X size={17} />
             </button>
           </div>
+
           <article className="dc-profile-card">
             <div className="dc-profile-card-top">
               <div className="dc-profile-avatar">{initial}</div>
@@ -63,8 +64,11 @@ export default function Profile() {
               </div>
               <span className="dc-profile-status"><span /> Active</span>
             </div>
+
             {loading ? (
-              <div className="dc-profile-loading"><span /><span /><span /></div>
+              <div className="dc-profile-loading">
+                <span /><span /><span />
+              </div>
             ) : error ? (
               <div className="dc-profile-error">{error}</div>
             ) : (
@@ -83,9 +87,12 @@ export default function Profile() {
                 </div>
               </div>
             )}
+
             <div className="dc-profile-card-footer">
               <p>Enjoy your next movie.</p>
-              <button type="button" onClick={handleLogout} className="dc-profile-logout"><LogOut size={16} /> Sign out</button>
+              <button type="button" onClick={handleLogout} className="dc-profile-logout">
+                <LogOut size={16} /> Sign out
+              </button>
             </div>
           </article>
         </section>
