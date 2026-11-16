@@ -61,6 +61,7 @@ The recommendation service combines several candidate sources when the required 
 - Implicit-feedback collaborative filtering.
 - Explicit preference and genre affinity from ratings and saved titles.
 - Popularity-based candidates as a fallback.
+- Co-view candidates from distinct user/movie history pairs, ranked by viewer overlap.
 
 Candidate lists are combined using **Reciprocal Rank Fusion (RRF)**. A genre-aware, MMR-style reranking step then trades some rank relevance for variety. Personalization depends on the user's activity and on the availability of the required model/index artifacts.
 
@@ -74,6 +75,7 @@ Candidate lists are combined using **Reciprocal Rank Fusion (RRF)**. A genre-awa
 | Collaborative | Implicit-feedback ALS (implicit) | Use patterns across users' watch-history interactions |
 | Explicit preferences | Rating, watchlist, and genre-affinity weights | Reflect positive and negative feedback |
 | Popularity | Catalog popularity and vote-average ordering | Provide a fallback candidate source |
+| Co-view | Distinct viewer overlap across movie-detail history events | Find catalog movies explored by users with overlapping interests |
 
 The content embedding model is **all-MiniLM-L6-v2**. The generated content artifact set includes:
 
@@ -83,6 +85,13 @@ The content embedding model is **all-MiniLM-L6-v2**. The generated content artif
 - movie_artifact_manifest.json
 
 The manifest stores model/schema information and SHA-256 hashes. The API validates the artifact set before loading it; partial or mismatched files are rejected.
+
+### Similar-film and co-view discovery
+
+- Movie detail pages expose a dedicated paginated similar-films page backed by TMDB similar-movie results.
+- The authenticated `/recommend/co-watch/{user_id}` endpoint finds other users who opened at least one movie in the current user's history, then ranks other catalog movies by cosine-style viewer overlap.
+- Repeated detail-page opens by the same viewer for the same movie count once. The endpoint excludes the current user's history, ratings, and watchlist titles, supports a minimum shared-viewer threshold, and returns support counts plus an explanation.
+- **Important data limitation:** the existing `watch_history` event is written when a user opens a movie detail page. It measures interest/detail-page views, not confirmed playback or completed watches. The UI therefore describes these as movies users *explored*, not movies they definitely watched.
 
 ### Ranking and explanations
 
@@ -302,7 +311,7 @@ The FastAPI app registers these route groups:
 |---|---|
 | /auth | Registration, login, and current-user authentication |
 | Movie routes | Catalog browsing, search, discovery, and movie details |
-| /recommend | Content, collaborative, and personalized recommendations |
+| /recommend | Content, collaborative, personalized, and co-view recommendations |
 | Watch-history routes | User watch activity |
 | Search-history routes | User search activity |
 | Ratings routes | User movie ratings |
