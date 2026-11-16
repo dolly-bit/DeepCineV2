@@ -1,142 +1,222 @@
 # DeepCine
 
-**A full-stack movie discovery and personalized recommendation platform.**
+**Discover films. Build your watchlist. Get recommendations shaped by your taste.**
 
-DeepCine combines TMDB-powered movie discovery with user-specific recommendation signals. It uses a React + Vite frontend, FastAPI backend, PostgreSQL persistence, semantic content retrieval, implicit-feedback collaborative filtering, genre affinity, popularity signals, and reciprocal rank fusion (RRF).
+DeepCine is a full-stack movie discovery and personalized recommendation application. It combines a React frontend, FastAPI backend, PostgreSQL persistence, TMDB movie data, semantic content retrieval, and multiple recommendation signals.
 
-> **Project status:** Active portfolio project. The repository includes the application, offline recommendation training/evaluation workflows, and backend tests. A successful local build or offline benchmark does not by itself establish production reliability or recommendation quality for real users.
+> **Project status:** Active portfolio project. The repository includes the application, offline model-building and evaluation workflows, and automated backend/frontend checks. Production reliability and recommendation quality must be verified against a deployed environment and real user activity; this README does not claim otherwise.
+
+---
+
+## Contents
+
+- [Product overview](#product-overview)
+- [Features](#features)
+- [Recommendation system](#recommendation-system)
+- [Architecture](#architecture)
+- [Technology stack](#technology-stack)
+- [Repository structure](#repository-structure)
+- [Local setup](#local-setup)
+- [API overview](#api-overview)
+- [Testing](#testing)
+- [Offline evaluation](#offline-evaluation)
+- [Deployment](#deployment)
+- [Security](#security)
+- [Known limitations](#known-limitations)
+- [Attribution](#attribution)
+
+## Product overview
+
+DeepCine is designed around a simple user journey:
+
+1. Discover films through trending collections, search, and filters.
+2. Open a movie to explore its available details.
+3. Save titles to a watchlist, rate films, and build a watch history.
+4. Receive recommendations using the signals available from your activity.
+
+The interface includes a cinematic landing page, login and signup, home dashboard, movie collections, search, discovery, movie details, personal library, profile, and AI recommendation views.
 
 ## Features
 
-### Movie discovery
-- Home dashboard with trending, top-rated, and upcoming movies.
-- Movie Collections with **Top Trending**, **Top Rated**, **Upcoming**, and **Recently Added** sections.
-- Search modal with trending suggestions, live search, and personalized-pick navigation.
-- Discover page with genre, language, mood, and sort filters.
-- Movie details including metadata, cast, trailers, and related discovery.
-- TMDB-backed movie catalog, metadata, and images.
+### Discovery and browsing
+- Home page with movie discovery sections.
+- Movie Collections: **Top Trending**, **Top Rated**, **Upcoming**, and **Recently Added**.
+- Search modal with live search and trending suggestions.
+- Discover page with genre, language, mood, and sorting controls.
+- Movie detail pages with available metadata, cast, trailers, and related discovery.
+- TMDB-powered movie metadata and artwork.
 
 ### Accounts and personal library
-- Registration and login with JWT-backed authentication.
-- Account profile and logout.
-- Watch history and search history for signed-in users.
-- Personal ratings and watchlist management.
-- Library page for personal movie activity.
+- User registration and login.
+- JWT-based API authentication.
+- User profile and logout.
+- User-specific watch history and search history.
+- Movie ratings.
+- Watchlist management and a personal library view.
 
-### Recommendation system
-- **Content-based retrieval:** SentenceTransformer embeddings indexed with FAISS.
-- **Collaborative filtering:** offline Alternating Least Squares (ALS) trained from implicit watch-history interactions.
-- **Genre affinity:** candidates derived from genres associated with a user's activity and feedback.
-- **Popularity fallback:** a candidate ranking signal when personal signals are limited.
-- **Rank fusion:** reciprocal rank fusion combines ranked candidate lists without assuming their raw scores are directly comparable.
+### Personalized recommendations
+The recommendation service combines several candidate sources when the required data and artifacts are available:
 
-The collaborative model is trained offline; it is not retrained on every API request. Personalization depends on user interactions, catalog coverage, and the availability of model/index artifacts. New or low-activity accounts may receive weaker recommendations.
+- Semantic content similarity.
+- Implicit-feedback collaborative filtering.
+- Explicit preference and genre affinity from ratings and saved titles.
+- Popularity-based candidates as a fallback.
+
+Candidate lists are combined using **Reciprocal Rank Fusion (RRF)**. A genre-aware, MMR-style reranking step then trades some rank relevance for variety. Personalization depends on the user's activity and on the availability of the required model/index artifacts.
+
+## Recommendation system
+
+### Candidate generation
+
+| Signal | Implementation | Purpose |
+|---|---|---|
+| Content-based | SentenceTransformer embeddings + FAISS | Retrieve semantically similar movie candidates |
+| Collaborative | Implicit-feedback ALS (implicit) | Use patterns across users' watch-history interactions |
+| Explicit preferences | Rating, watchlist, and genre-affinity weights | Reflect positive and negative feedback |
+| Popularity | Catalog popularity and vote-average ordering | Provide a fallback candidate source |
+
+The content embedding model is **all-MiniLM-L6-v2**. The generated content artifact set includes:
+
+- movie_embeddings.npy
+- movie_ids.npy
+- movie_index.faiss
+- movie_artifact_manifest.json
+
+The manifest stores model/schema information and SHA-256 hashes. The API validates the artifact set before loading it; partial or mismatched files are rejected.
+
+### Ranking and explanations
+
+1. Generate ranked candidate lists from the available signals.
+2. Combine lists with weighted Reciprocal Rank Fusion.
+3. Apply genre-aware diversification using an MMR-style objective and Jaccard genre overlap.
+4. Return movie results with an explanation based on observed genre matches where available.
+
+The explanation describes matching genres from watched, highly rated, or saved movies. It is not a causal explanation of the recommendation model.
+
+### Collaborative model requirements
+
+ALS training is an offline workflow, not a per-request operation. The current training gate requires at least **5 eligible users**, each with at least **3 distinct watched movies**. These are minimum data eligibility checks, not evidence of a particular recommendation quality.
+
+A newly seeded catalog has no user interaction history. Collect sufficient interactions and train the collaborative model before expecting this signal to contribute.
 
 ## Architecture
 
-```text
-React + Vite
-    | HTTP / JSON + JWT
-    v
-FastAPI application
-    |-- Authentication and account routes
-    |-- TMDB movie, search, discovery, and detail routes
-    |-- Watch history and search history
-    |-- Ratings and watchlist
-    |-- Recommendation orchestration
-    |
-    +--> PostgreSQL
-    +--> SentenceTransformers -> embeddings -> FAISS index
-    +--> implicit ALS -> collaborative model artifact
-    +--> TMDB API -> movie metadata and images
-```
-
-### Recommendation flow
-1. Retrieve content-similar candidates from the embedding index.
-2. Retrieve collaborative candidates when a trained ALS artifact and sufficient interaction data are available.
-3. Derive genre-affinity candidates from the user's recorded activity.
-4. Add a popularity-based candidate list as a fallback signal.
-5. Fuse ranked lists with reciprocal rank fusion (RRF).
-6. Apply an MMR-style reranker that balances incoming rank relevance against maximum genre Jaccard overlap with already selected movies.
-7. Return a user-facing explanation when a candidate shares genres with the user's watched, highly rated, or saved movies. Explicitly disliked titles are not used as positive explanation evidence.
-
-The diversification parameter currently uses a relevance weight of 0.8. This is a heuristic, not a learned or empirically optimized parameter; its effect on ranking quality must be measured with offline evaluation. Explanations are evidence-based genre matches, not causal explanations of the model.
-
-The production recommendation service is implemented in `backend/app/services/ai_recommendation_services.py` and `backend/ai/`. The offline MovieLens benchmark is a separate evaluation workflow; its metrics must not be presented as measured production-user performance.
+~~~text
+┌───────────────────────────────┐
+│          React + Vite         │
+│ Landing · Home · Search       │
+│ Discover · Movie · Library    │
+└───────────────┬───────────────┘
+                │ HTTP / JSON + JWT
+                ▼
+┌───────────────────────────────┐
+│            FastAPI            │
+│ Auth · Movies · Search        │
+│ Watch history · Ratings       │
+│ Watchlist · Recommendations   │
+│ Admin catalog/index tasks     │
+└───────┬───────────┬───────────┘
+        │           │
+        ▼           ▼
+┌─────────────┐  ┌─────────────────────────────┐
+│ PostgreSQL  │  │ Recommendation artifacts   │
+│ Users       │  │ SentenceTransformer         │
+│ Movies      │  │ Embeddings + FAISS index    │
+│ Interactions│  │ Implicit ALS model          │
+└─────────────┘  └─────────────────────────────┘
+        ▲
+        │
+        ▼
+┌───────────────────────────────┐
+│ TMDB API                      │
+│ Movie metadata and images     │
+└───────────────────────────────┘
+~~~
 
 ## Technology stack
 
-| Area | Technologies |
+| Layer | Technologies |
 |---|---|
-| Frontend | React 19, Vite 8, React Router, Tailwind CSS 4 |
-| UI | Framer Motion, Lucide React, Swiper, React Fast Marquee |
-| API | Python 3.11.9, FastAPI, Pydantic, Uvicorn |
-| Persistence | PostgreSQL, SQLAlchemy, Alembic |
+| Frontend | React 19, Vite 8, React Router |
+| Styling and UI | Tailwind CSS 4, Framer Motion, Lucide React, Swiper |
+| Backend API | Python 3.11.9, FastAPI, Uvicorn, Pydantic |
+| Database | PostgreSQL, SQLAlchemy, Alembic |
 | Authentication | JWT, bcrypt |
 | Content retrieval | SentenceTransformers, FAISS, NumPy |
-| Collaborative filtering | `implicit` ALS, SciPy sparse matrices |
-| Movie metadata | The Movie Database (TMDB) API |
+| Collaborative filtering | implicit ALS, SciPy |
+| Movie data | TMDB API |
 | Evaluation | MovieLens, pandas, ranking metrics, bootstrap confidence intervals |
 | Quality checks | pytest, ESLint, Vite production build |
 
 ## Repository structure
 
-```text
+~~~text
 DeepCineV2/
 ├── backend/
-│   ├── ai/                    # Embeddings, FAISS, ALS, ranking, recommender
+│   ├── ai/                 # Embeddings, FAISS, ALS, ranking, recommender
 │   ├── app/
-│   │   ├── auth/              # JWT and password helpers
-│   │   ├── core/              # Application configuration
-│   │   ├── database/          # SQLAlchemy engine and session
-│   │   ├── models/            # User, movie, feedback and library models
-│   │   ├── routes/            # FastAPI route modules
-│   │   ├── services/          # TMDB and recommendation services
-│   │   └── schedular/         # Catalog refresh scheduler
-│   ├── evaluation/            # MovieLens benchmark protocol
-│   ├── tests/                 # Backend and ranking/evaluation tests
-│   ├── evaluate_movielens.py  # Offline MovieLens benchmark
+│   │   ├── auth/
+│   │   ├── core/
+│   │   ├── database/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   └── schedular/
+│   ├── evaluation/
+│   ├── tests/
+│   ├── evaluate_movielens.py
 │   ├── evaluate_recommenders.py
-│   ├── import_movies.py       # TMDB catalog import (target: 10,000)
+│   ├── generate_embeddings.py
 │   ├── import_genres.py
-│   ├── generate_embeddings.py # Build content retrieval artifacts
+│   ├── import_movies.py
+│   ├── link_movie_genres.py
 │   ├── train_collaborative_model.py
-│   ├── run.py                 # API entry point
+│   ├── run.py
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   ├── pages/             # Landing, Home, Discover, Library, Profile, etc.
-│   │   └── services/          # API clients
-│   └── package.json
+│   │   ├── pages/
+│   │   └── services/
+│   ├── package.json
+│   └── package-lock.json
+├── DEPLOYMENT.md
 ├── PORTFOLIO_DEMO.md
 └── README.md
-```
+~~~
 
 ## Local setup
 
 ### Prerequisites
-- Python **3.11.9** (pinned in `backend/.python-version`).
-- Node.js compatible with the Vite version in `frontend/package.json`.
-- PostgreSQL, unless you intentionally configure another supported SQLAlchemy database URL for development.
-- TMDB API credentials for live movie metadata features.
+- Python **3.11.9** (specified in backend/.python-version and backend/runtime.txt).
+- Node.js and npm compatible with the Vite version in frontend/package.json.
+- PostgreSQL.
+- TMDB API credentials for live movie-data features.
 
-### 1. Configure the backend
+There is no root-level Docker Compose file in this repository. Start PostgreSQL separately and make sure the database connection string points to a reachable database.
 
-From PowerShell at the repository root:
+### 1. Clone the repository
 
-```powershell
+~~~powershell
+git clone https://github.com/dolly-bit/DeepCineV2.git
+cd DeepCineV2
+git switch feature/deepcine-2.0
+~~~
+
+### 2. Set up the backend
+
+~~~powershell
 cd backend
-python -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 Copy-Item .env.example .env
-```
+~~~
 
-Edit `backend/.env`. The checked-in example uses PostgreSQL on port **5433**:
+Edit backend/.env:
 
-```dotenv
+~~~dotenv
 DATABASE_URL=postgresql://deepcine:deepcine_dev@127.0.0.1:5433/deepcine
 SECRET_KEY=replace-with-a-long-random-secret
 ALGORITHM=HS256
@@ -145,129 +225,158 @@ TMDB_API_KEY=your_tmdb_api_key
 TMDB_ACCESS_TOKEN=your_tmdb_v4_read_access_token
 ALLOWED_ORIGINS=http://localhost:5173
 ADMIN_TASK_TOKEN=
-```
+~~~
 
-Create the PostgreSQL database and role to match the URL, or change the URL to match your local PostgreSQL configuration. Never commit real credentials or `.env`.
+The example URL expects PostgreSQL on port **5433**, with a database and role matching the URL. Change it to match your own PostgreSQL setup if needed. Never commit real credentials or your .env file.
 
-### 2. Import catalog data and build recommendation artifacts
+### 3. Import catalog data and build content artifacts
 
-With the backend virtual environment active and the database configured:
+With PostgreSQL running, the backend virtual environment active, and TMDB credentials configured, run these commands from backend/:
 
-```powershell
+~~~powershell
 python import_genres.py
 python import_movies.py
 python generate_embeddings.py
-```
+~~~
 
-The catalog import targets up to **10,000** TMDB movies. It reports whether the target was reached; rerun if the import is incomplete. Rebuild the embedding/index artifacts after changing the local movie catalog.
+The movie import targets up to 10,000 records. Check the script output to confirm how many were actually imported.
 
-For older catalog records that do not have movie-genre relationships, run:
+If existing movie records need their genre relationships populated, run:
 
-```powershell
+~~~powershell
 python link_movie_genres.py
-```
+~~~
 
-Collaborative filtering requires watch-history interactions from multiple users. Training now requires at least 5 eligible users with at least 3 distinct watched movies each; repeated watches do not satisfy the distinct-movie threshold. These are minimum data-quality gates, not proof of statistical quality. If the cohort is too small, training fails clearly and content/popularity recommendations remain the appropriate fallback. After enough interactions have been collected, train the model:
+Build the collaborative model only after enough watch-history interactions have been collected:
 
-```powershell
+~~~powershell
 python train_collaborative_model.py
-```
+~~~
 
-This creates a collaborative model artifact under the backend directory. A fresh database with no interactions or trained artifact cannot provide meaningful collaborative recommendations.
+See [Collaborative model requirements](#collaborative-model-requirements) for the minimum training-data gate.
 
-### 3. Start the backend
+### 4. Start the backend API
 
-From the `backend` directory:
+From backend/:
 
-```powershell
+~~~powershell
 python run.py
-```
+~~~
 
-The API listens on `http://127.0.0.1:8000` by default.
-- Health check: `http://127.0.0.1:8000/health`
-- Interactive API documentation: `http://127.0.0.1:8000/docs`
+By default, the API runs at:
 
-### 4. Configure and start the frontend
+- API root: http://127.0.0.1:8000
+- Readiness check: http://127.0.0.1:8000/health
+- Liveness check: http://127.0.0.1:8000/health/live
+- Interactive API docs: http://127.0.0.1:8000/docs
 
-Open a second PowerShell terminal at the repository root:
+### 5. Set up and start the frontend
 
-```powershell
+Open a second terminal at the repository root:
+
+~~~powershell
 cd frontend
 npm ci
 Copy-Item .env.example .env
-```
+~~~
 
-Set the frontend environment variable:
+Set VITE_API_BASE_URL in frontend/.env:
 
-```dotenv
+~~~dotenv
 VITE_API_BASE_URL=http://127.0.0.1:8000
-```
+~~~
 
 Start Vite:
 
-```powershell
+~~~powershell
 npm run dev
-```
+~~~
 
-Open the local URL printed by Vite (normally `http://localhost:5173`).
+Open the local URL printed by Vite (normally http://localhost:5173).
 
-## API areas
+## API overview
 
-The FastAPI application registers route groups for authentication, movie browsing/search/discovery/details, recommendations, watch history, search history, ratings, watchlist, and admin catalog/index tasks. Use `/docs` on a running backend as the authoritative runtime endpoint reference. Protected routes require authentication, and user-scoped routes enforce access to the current user's data.
+The FastAPI app registers these route groups:
 
-## Tests and quality checks
+| Route group | Responsibility |
+|---|---|
+| /auth | Registration, login, and current-user authentication |
+| Movie routes | Catalog browsing, search, discovery, and movie details |
+| /recommend | Content, collaborative, and personalized recommendations |
+| Watch-history routes | User watch activity |
+| Search-history routes | User search activity |
+| Ratings routes | User movie ratings |
+| Watchlist routes | Saved movies |
+| /admin | Token-protected catalog seeding and content-index refresh |
 
-Run backend tests from the `backend` directory:
+Use the running Swagger UI at /docs as the authoritative reference for exact paths, parameters, request bodies, and response schemas. User-specific endpoints require a valid bearer token. Admin tasks require the server-side ADMIN_TASK_TOKEN in the X-Admin-Token header.
 
-```powershell
+## Testing
+
+Run backend tests from backend/:
+
+~~~powershell
 python -m pytest -q
-```
+~~~
 
-Run frontend checks from the `frontend` directory:
+Run frontend checks from frontend/:
 
-```powershell
+~~~powershell
 npm run lint
 npm run build
-```
+~~~
 
-A passing test suite, lint run, or production build does not verify the complete application. Separately test database connectivity, TMDB credentials and rate limits, authentication, watchlist/rating persistence, recommendation behavior, and deployment configuration.
+These checks cover automated tests, static linting, and frontend compilation. They do not, by themselves, prove that the complete application works with a live database, TMDB credentials, valid model artifacts, or production hosting. Verify those dependencies separately.
 
-## Offline MovieLens evaluation
+## Offline evaluation
 
-The repository includes a separate MovieLens evaluation pipeline:
-- Runner: `backend/evaluate_movielens.py`
-- Protocol and interpretation: `backend/evaluation/MOVIELENS_BENCHMARK.md`
-- Supporting recommender evaluation: `backend/evaluate_recommenders.py`
+The repository includes an offline MovieLens evaluation workflow:
 
-The benchmark maps MovieLens movie IDs to TMDB IDs and evaluates only the catalog intersection. It is an implicit top-N retrieval evaluation, not rating prediction and not an evaluation with DeepCine production users. Catalog overlap changes when the imported catalog changes; rerun the overlap diagnostic and benchmark instead of treating an old overlap count as permanent.
+- Runner: backend/evaluate_movielens.py
+- Protocol and interpretation: backend/evaluation/MOVIELENS_BENCHMARK.md
+- Supporting evaluation: backend/evaluate_recommenders.py
 
-When reporting results, include the dataset/catalog snapshot, split protocol, candidate universe, random seeds, metrics, and uncertainty intervals. Keep validation-based tuning separate from final test evaluation; do not cherry-pick favorable seeds.
+The benchmark maps MovieLens movie IDs to TMDB IDs and evaluates only the catalog intersection. It is an implicit top-N retrieval evaluation—not rating prediction and not an evaluation with DeepCine production users.
 
-## Configuration and security
-- Keep backend and frontend environment files out of Git.
-- Use a long, random, unique `SECRET_KEY`.
-- Set `ALLOWED_ORIGINS` to explicit trusted frontend origins in deployed environments.
-- Keep `ADMIN_TASK_TOKEN` server-side; never expose it in Vite variables or browser code.
+When reporting benchmark results, include the dataset/catalog snapshot, split protocol, candidate universe, random seeds, metrics, and uncertainty intervals. Keep validation-based tuning separate from final test evaluation. Do not present offline MovieLens metrics as measured production-user performance.
+
+## Deployment
+
+Deployment instructions are maintained separately:
+
+- [Deployment runbook](./DEPLOYMENT.md) — Vercel frontend, FastAPI hosting, environment variables, production seeding, model artifacts, and release verification.
+- [Portfolio demo checklist](./PORTFOLIO_DEMO.md) — user journey, recommendation architecture, engineering evidence, and limitations to disclose.
+
+The frontend and backend are separate deployable services. A successful frontend deployment does not prove the API, database, TMDB integration, or recommendation artifacts are working.
+
+## Security
+
+- Keep .env files and credentials out of version control.
+- Generate a long, random, unique SECRET_KEY.
+- Set ALLOWED_ORIGINS to the exact trusted frontend origins in production.
+- Keep ADMIN_TASK_TOKEN on the backend only. Never expose it through a VITE_ variable.
 - Use HTTPS and managed secret storage in production.
-- Define database permissions and backup/restore procedures before storing real user data.
+- Configure database backups and a tested restore procedure before storing real user data.
 
-## Known limitations and engineering work
-- **Cold start:** personalized and collaborative recommendations are constrained by limited user interactions.
-- **Model lifecycle:** collaborative training is offline; retrain and deploy the model deliberately as interaction data changes.
-- **Index lifecycle:** embedding/FAISS artifacts must be rebuilt after catalog changes and persisted or regenerated in ephemeral hosting.
-- **Scheduler deployment:** the catalog scheduler runs inside the API process. Multiple API workers or replicas can trigger duplicate jobs; a dedicated worker/scheduler is preferable for multi-instance deployments.
-- **Database migrations:** startup currently calls SQLAlchemy `create_all` to create missing tables. This is not a substitute for a versioned Alembic migration workflow in production.
-- **External dependency:** live catalog and movie-detail features depend on TMDB availability, credentials, and rate limits.
-- **Evaluation transfer:** offline MovieLens results do not establish recommendation performance for new DeepCine users.
+## Known limitations
+
+- **Cold start:** new users have limited interaction history, so recommendations may rely more heavily on content, genre, and popularity signals.
+- **ALS lifecycle:** collaborative filtering is trained offline. The model must be trained and deployed deliberately as interaction data changes.
+- **Artifact lifecycle:** embedding and FAISS files must be rebuilt after catalog changes and persisted or regenerated after deployments that use ephemeral filesystems.
+- **Scheduler:** catalog refresh scheduling currently runs inside the API process. Multiple API instances can run duplicate jobs; use a dedicated worker or managed scheduler before scaling horizontally.
+- **Database migrations:** application startup currently calls SQLAlchemy create_all. This does not replace a versioned Alembic migration process for production schema changes.
+- **External dependency:** live movie data depends on TMDB availability, credentials, and rate limits.
+- **Evaluation transfer:** offline MovieLens results do not establish recommendation quality for new DeepCine users.
 
 ## Portfolio walkthrough
 
-Use [PORTFOLIO_DEMO.md](./PORTFOLIO_DEMO.md) for a repeatable demonstration checklist, validation steps, and evidence to capture. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the Vercel/API deployment runbook. Do not claim a workflow, deployment, benchmark, or quality check passed unless it has been run and verified in the target environment.
+For a repeatable project demonstration, follow [PORTFOLIO_DEMO.md](./PORTFOLIO_DEMO.md). It covers the user journey, recommendation architecture, engineering evidence, and limitations to disclose.
 
 ## Attribution
 
-Movie metadata and images are provided by [The Movie Database (TMDB)](https://www.themoviedb.org/). DeepCine is an independent project and is not endorsed or certified by TMDB. MovieLens data is provided by [GroupLens](https://grouplens.org/datasets/movielens/); follow the dataset's terms of use.
+- Movie metadata and images are provided by [The Movie Database (TMDB)](https://www.themoviedb.org/). DeepCine is an independent project and is not endorsed or certified by TMDB.
+- MovieLens datasets are provided by [GroupLens](https://grouplens.org/datasets/movielens/). Follow the dataset's terms of use.
 
 ---
 
-**DeepCine is a portfolio engineering project. Its credibility should come from reproducible tests, transparent offline evaluation, verified end-to-end workflows, and honest disclosure of operational limitations—not feature claims alone.**
+**DeepCine is a portfolio engineering project. Its credibility should come from reproducible tests, transparent evaluation, verified end-to-end workflows, and honest disclosure of operational limitations—not feature claims alone.**
