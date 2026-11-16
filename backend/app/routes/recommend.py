@@ -6,6 +6,7 @@ from ai import collaborative
 from app.auth.dependencies import get_current_user
 from app.database.connection import get_db
 from app.models.user import User
+from app.services.co_watch_recommendations import get_co_watch_recommendations
 from app.services.ai_recommendation_services import (
     get_personalized_recommendations,
     build_recommendation_explanations,
@@ -72,4 +73,25 @@ def personalized_recommendations(
     return [
         _serialize_movie(movie, explanations.get(movie.tmdb_id))
         for movie in movies
+    ]
+
+
+@router.get("/co-watch/{user_id}")
+def co_watch_recommendations(
+    user_id: int,
+    top_k: int = Query(default=20, ge=1, le=50),
+    min_shared_users: int = Query(default=1, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_self(user_id, current_user)
+    results = get_co_watch_recommendations(
+        user_id, db, top_k=top_k, min_shared_users=min_shared_users
+    )
+    return [
+        _serialize_movie(
+            movie,
+            f"Explored by {shared} other viewer(s) who also explored films in your history.",
+        ) | {"co_watch_score": round(score, 4), "shared_viewers": shared}
+        for movie, score, shared in results
     ]
