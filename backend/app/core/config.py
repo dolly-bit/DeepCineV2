@@ -12,18 +12,21 @@ class Settings(BaseSettings):
     TMDB_API_KEY: str = ""
     TMDB_ACCESS_TOKEN: str = ""
 
+    # Use "null" with serverless PostgreSQL (for example Neon) so each
+    # request closes its database connection instead of leaving an idle
+    # connection checked out in SQLAlchemy's local pool.
+    DB_POOL_MODE: str = "queue"
+
+    # The in-process scheduler is useful for local development, but should
+    # be disabled on a sleeping/free web service. Scheduled work cannot be
+    # relied on while the service is scaled down.
+    ENABLE_SCHEDULER: bool = True
+
     # Comma-separated list of allowed frontend origins, e.g.
-    # "https://deepcine.vercel.app,https://www.deepcine.app". Defaults to
-    # "*" (allow everything) so local dev keeps working with no setup -
-    # set this explicitly in production so the API isn't wide open to
-    # every origin on the internet.
+    # "https://deepcine-v2.vercel.app". Defaults to "*" for local setup.
     ALLOWED_ORIGINS: str = "*"
 
-    # Shared-secret token for the /admin/* endpoints (see
-    # app/routes/admin.py) - lets you trigger seeding/index-rebuild over
-    # HTTP without needing shell access, which free-tier hosting plans
-    # often don't include. Leave blank to disable these endpoints
-    # entirely (they 503 if called with no token set).
+    # Shared-secret token for the /admin/* endpoints.
     ADMIN_TASK_TOKEN: str = ""
 
     @property
@@ -33,17 +36,11 @@ class Settings(BaseSettings):
 
         origins = []
         for origin in self.ALLOWED_ORIGINS.split(","):
-            # Defensively normalize the most common copy-paste mistakes:
-            # a trailing slash (browsers never send one in the Origin
-            # header, so "https://site.com/" would never match) and
-            # accidental surrounding quotes from pasting into a
-            # dashboard field.
             cleaned = origin.strip().strip('"').strip("'").rstrip("/")
             if cleaned:
                 origins.append(cleaned)
 
         return origins
-
 
 
 settings = Settings()
