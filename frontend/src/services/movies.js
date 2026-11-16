@@ -80,9 +80,14 @@ export const getMovieCast = async (id) => {
   return response.data;
 };
 
-export const getSimilarMovies = async (id) => {
-  const response = await api.get(`/movies/${id}/similar`);
-  return response.data;
+export const getSimilarMovies = async (id, page = 1) => {
+  const response = await api.get(`/movies/${id}/similar`, { params: { page } });
+  const payload = response.data || {};
+  return {
+    page: payload.page || page,
+    total_pages: payload.total_pages || 1,
+    results: (payload.results || []).map(normalizeMovie),
+  };
 };
 
 
