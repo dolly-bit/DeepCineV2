@@ -1515,19 +1515,20 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var
 }
 
 
-/* Search modal: match DeepCine navy/cyan theme and keep result posters compact. */
-.dc-search-modal { background:#081925; border:1px solid rgba(54,220,232,.22); border-radius:16px; }
-.dc-search-modal-bar { background:#0b1d29; border-color:rgba(54,220,232,.14); }
-.dc-search-modal-icon { color:#36dce8; flex:0 0 auto; }
-.dc-search-modal-input { min-width:0; height:34px; color:#e8f4f7; font-size:16px; line-height:1.3; border:0!important; box-shadow:none!important; outline:none!important; }
-.dc-search-modal-input::placeholder { color:#78909b; font-size:15px; }
+/* Search modal: unified DeepCine charcoal + cinematic red theme. */
+.dc-search-modal { background:#0b0d10 !important; border:1px solid rgba(255,75,82,.24) !important; border-radius:16px; }
+.dc-search-modal-bar { background:#101318 !important; border-color:rgba(255,255,255,.1) !important; }
+.dc-search-modal-icon { color:#ff666d !important; flex:0 0 auto; }
+.dc-search-modal-input { min-width:0; height:34px; color:#f4f4f1 !important; font-size:16px; line-height:1.3; border:0!important; box-shadow:none!important; outline:none!important; }
+.dc-search-modal-input::placeholder { color:#858d94 !important; font-size:15px; }
 .dc-search-modal-input:focus { border:0!important; outline:none!important; box-shadow:none!important; }
-.dc-search-modal-close { color:#8da5af; transition:color .18s ease; }
-.dc-search-modal-close:hover { color:#55e6ef; }
-.dc-search-modal-content { background:#071722; }
-.dc-search-section-title { color:#e8f3f6; font-size:17px; line-height:1.35; }
-.dc-search-personalized { color:#a8f1f4; border:1px solid rgba(54,220,232,.28); background:rgba(20,151,190,.12); }
-.dc-search-personalized:hover { background:rgba(20,151,190,.22); }
+.dc-search-modal-close { color:#a2a8ad !important; transition:color .18s ease; }
+.dc-search-modal-close:hover { color:#ff8589 !important; }
+.dc-search-modal-content { background:#090b0e !important; }
+.dc-search-section-title { color:#f4f4f1 !important; font-size:17px; line-height:1.35; }
+.dc-search-personalized { color:#ffb0b3 !important; border:1px solid rgba(255,75,82,.35) !important; background:rgba(255,75,82,.09) !important; }
+.dc-search-personalized:hover { background:rgba(255,75,82,.17) !important; }
+.dc-search-modal .dc-movie-rating { border-color:rgba(255,75,82,.24) !important; color:#ff999d !important; }
 .dc-search-results-grid { grid-template-columns:repeat(auto-fill,minmax(138px,1fr)); align-items:start; gap:20px 16px; }
 .dc-search-result-item { width:100%; max-width:158px; min-width:0; }
 .dc-search-result-item > .dc-movie-card { width:100%; min-width:0; }
