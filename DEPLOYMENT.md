@@ -5,7 +5,7 @@ This repository's frontend is a Vite SPA and the backend is a FastAPI service. T
 ## 1. Deploy the frontend on Vercel
 
 1. Import the GitHub repository `dolly-bit/DeepCineV2` into Vercel, or use the existing Vercel project.
-2. Set the production branch to `feature/deepcine-2.0` if this is the branch you intend to publish.
+2. Set the production branch to `main`.
 3. Set **Root Directory** to `frontend`.
 4. Build command: `npm run build`.
 5. Output directory: `dist`.
@@ -16,11 +16,11 @@ The frontend deployment does not include the backend or database. A successful V
 
 ## 2. Deploy the API and PostgreSQL
 
-Create a Python 3.11.9 web service and a managed PostgreSQL database on your chosen host.
+Create a Python 3.11.9 web service and a managed PostgreSQL database on your chosen host. The repository's `docker-compose.yml` is for local development only; it is not a production database host. A PostgreSQL container running on your laptop is not reachable by Render and should never be used as Render's production `DATABASE_URL`.
 
 For Render:
 - Repository: `dolly-bit/DeepCineV2`
-- Branch: `feature/deepcine-2.0`
+- Branch: `main`
 - Root directory: `backend`
 - Runtime: Python
 - Build command: `pip install -r requirements.txt`

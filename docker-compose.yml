@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16
+    container_name: deepcine-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deepcine
+      POSTGRES_PASSWORD: deepcine_dev
+      POSTGRES_DB: deepcine
+    ports:
+      # Host port 5433 avoids colliding with a local PostgreSQL installation.
+      - "5433:5432"
+    volumes:
+      - deepcine_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deepcine -d deepcine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  deepcine_postgres_data:
