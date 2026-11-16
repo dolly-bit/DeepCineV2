@@ -1,4 +1,5 @@
 from collections import defaultdict
+import logging
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -9,6 +10,8 @@ from app.models import (
 from ai import collaborative
 from ai.recommender import recommend_for_user_content
 from ai.ranking import reciprocal_rank_fusion, diversify_by_genre
+
+logger = logging.getLogger(__name__)
 
 
 def _rank_by_genre_affinity(db: Session, genre_weights, excluded_movie_ids, top_k=100):
@@ -121,17 +124,29 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
             ).all()
         )
 
-    content = [
-        tmdb_id for tmdb_id in recommend_for_user_content(user_id, db, top_k=100)
-        if tmdb_id not in excluded_tmdb_ids
-    ]
-    collaborative_ranking = [
-        tmdb_id
-        for tmdb_id, _score in collaborative.recommendation_scores_for_user(
-            user_id, top_k=100
-        )
-        if tmdb_id not in excluded_tmdb_ids
-    ]
+    # Optional model artifacts must never take down the complete recommendation
+    # endpoint. Keep each signal isolated so popularity/genre ranking can still
+    # serve recommendations when FAISS or ALS artifacts are missing or stale.
+    try:
+        content = [
+            tmdb_id for tmdb_id in recommend_for_user_content(user_id, db, top_k=100)
+            if tmdb_id not in excluded_tmdb_ids
+        ]
+    except Exception:
+        logger.exception("Content recommendation signal failed for user_id=%s", user_id)
+        content = []
+
+    try:
+        collaborative_ranking = [
+            tmdb_id
+            for tmdb_id, _score in collaborative.recommendation_scores_for_user(
+                user_id, top_k=100
+            )
+            if tmdb_id not in excluded_tmdb_ids
+        ]
+    except Exception:
+        logger.exception("Collaborative recommendation signal failed for user_id=%s", user_id)
+        collaborative_ranking = []
 
     preference_ranking = _rank_by_genre_affinity(
         db, genre_weights, excluded_db_ids, top_k=100
@@ -164,6 +179,13 @@ def get_personalized_recommendations(user_id: int, db: Session, top_k: int = 20)
     fused_ids = [
         mid for mid in fused_ids if mid not in excluded_tmdb_ids
     ]
+    if not fused_ids:
+        # A deterministic catalog fallback prevents a model-specific failure or
+        # empty ranking merge from producing a blank recommendation section.
+        fused_ids = [
+            movie.tmdb_id for movie in popular
+            if movie.tmdb_id not in excluded_tmdb_ids
+        ][:max(top_k * 5, top_k)]
     if not fused_ids:
         return []
 
