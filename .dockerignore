@@ -1,0 +1,44 @@
+# Git and local development
+.git
+.git/**
+**/.git
+**/.git/**
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/venv
+**/.venv
+**/node_modules
+
+# Secrets and local environment files
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Frontend is deployed separately to Vercel
+frontend
+frontend/**
+
+# Local databases, datasets, logs, and generated model artifacts
+**/*.db
+**/*.sqlite3
+datasets
+datasets/**
+**/*.npy
+**/*.npz
+**/*.faiss
+**/*.pkl
+**/*.pt
+**/*.pth
+**/evaluation/results
+**/*.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode
+.idea
