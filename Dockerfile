@@ -1,7 +1,7 @@
 # DeepCine FastAPI API image for Google Cloud Run.
 # Build from the repository root: gcloud builds submit --tag IMAGE_URL
 
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
