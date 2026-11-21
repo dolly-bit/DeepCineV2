@@ -1,8 +1,10 @@
 import asyncio
 import logging
+import time
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.connection import Base, engine
@@ -27,9 +29,31 @@ from app.schedular.schedular import start_scheduler, stop_scheduler
 
 logger = logging.getLogger("deepcine")
 
-# Existing project startup behavior creates missing tables on boot.
-# New Rating/WatchlistItem models are imported above so their tables are registered.
-Base.metadata.create_all(bind=engine)
+
+def initialize_database() -> None:
+    """Create missing tables after the API process starts.
+
+    Neon may need a few seconds to resume a suspended compute. Retry transient
+    connection failures rather than failing during Python module import.
+    """
+    for attempt in range(1, 6):
+        try:
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database schema check complete.")
+            return
+        except OperationalError:
+            if attempt == 5:
+                logger.exception("Could not connect to the database during startup.")
+                raise
+
+            delay = min(2 ** (attempt - 1), 8)
+            logger.warning(
+                "Database connection attempt %s/5 failed; retrying in %s seconds.",
+                attempt,
+                delay,
+            )
+            time.sleep(delay)
+
 
 app = FastAPI(
     title="DeepCine AI API",
@@ -57,6 +81,10 @@ app.include_router(admin_router)
 
 @app.on_event("startup")
 async def warm_up_caches():
+    # Database work happens after module import, and the worker thread keeps
+    # synchronous SQLAlchemy operations off the event loop.
+    await asyncio.to_thread(initialize_database)
+
     async def _warm():
         try:
             await asyncio.gather(
@@ -69,7 +97,11 @@ async def warm_up_caches():
             logger.warning("TMDB cache warm-up failed: %s", exc)
 
     asyncio.create_task(_warm())
-    start_scheduler()
+
+    if settings.ENABLE_SCHEDULER:
+        start_scheduler()
+    else:
+        logger.info("In-process scheduler disabled by ENABLE_SCHEDULER=false.")
 
 
 @app.on_event("shutdown")
@@ -85,7 +117,7 @@ def root():
 
 @app.get("/health")
 def health():
-    """Readiness probe: verify the API process can reach its database."""
+    """Readiness check: verify the API process can reach its database."""
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -99,5 +131,5 @@ def health():
 
 @app.get("/health/live")
 def liveness():
-    """Liveness probe: confirm the application process is responsive."""
+    """Cheap liveness probe; deliberately does not wake a sleeping database."""
     return {"status": "alive"}

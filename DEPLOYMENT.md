@@ -1,6 +1,6 @@
 # DeepCine deployment runbook
 
-This repository's frontend is a Vite SPA and the backend is a FastAPI service. The frontend can be deployed on Vercel; the API needs a persistent PostgreSQL database and a Python host such as Render.
+This repository's frontend is a Vite SPA and the backend is a FastAPI service. The frontend can be deployed on Vercel; the API can run on Render Free and use Neon PostgreSQL Free for persistent storage with automatic compute scale-to-zero.
 
 ## 1. Deploy the frontend on Vercel
 
@@ -14,9 +14,19 @@ This repository's frontend is a Vite SPA and the backend is a FastAPI service. T
 
 The frontend deployment does not include the backend or database. A successful Vercel build alone does not mean API requests work.
 
-## 2. Deploy the API and PostgreSQL
+## 2. Create a Neon PostgreSQL database
 
-Create a Python 3.11.9 web service and a managed PostgreSQL database on your chosen host. The repository's `docker-compose.yml` is for local development only; it is not a production database host. A PostgreSQL container running on your laptop is not reachable by Render and should never be used as Render's production `DATABASE_URL`.
+1. Create a project at [Neon](https://neon.com/).
+2. Create or select the production branch/database.
+3. Copy the **pooled** connection string from the Connect dialog. Keep the password private.
+4. Confirm the URL uses SSL (Neon's connection string normally includes `sslmode=require`).
+5. Back up/export the existing Render PostgreSQL database and restore it into Neon before switching production traffic. Do not delete the old database until the restore and application checks succeed.
+
+Neon's Free plan currently includes 100 compute-hours per project each month, 5 GB public network transfer, and automatic compute suspension after five minutes of inactivity. Compute usage is not zero while the database is active; the free quota can be exhausted. Check the current [Neon pricing and limits](https://neon.com/pricing) before relying on the free tier.
+
+The repository's `docker-compose.yml` is for local development only; it is not a production database host. A PostgreSQL container running on your laptop is not reachable by Render and must never be used as Render's production `DATABASE_URL`.
+
+## 3. Deploy the API on Render Free
 
 For Render:
 - Repository: `dolly-bit/DeepCineV2`
@@ -25,14 +35,17 @@ For Render:
 - Runtime: Python
 - Build command: `pip install -r requirements.txt`
 - Start command: `python run.py`
-- Health check path: `/health`
-- Use one API instance initially. The in-process APScheduler is not protected by a distributed lock; multiple instances can run duplicate catalog refresh jobs.
+- Health check path: `/health/live` (process liveness only; does not query Neon)
+- Use one API instance initially. Free services sleep after 15 minutes without inbound traffic and take about one minute to wake on the next request.
+- Set `ENABLE_SCHEDULER=false`; an in-process scheduler cannot reliably run while a free service is asleep.
 
 Set these backend environment variables in the host dashboard:
 
 | Key | Value |
 |---|---|
-| `DATABASE_URL` | Managed PostgreSQL connection string |
+| `DATABASE_URL` | Neon pooled PostgreSQL connection string (keep `sslmode=require`) |
+| `DB_POOL_MODE` | `null` (close connections instead of retaining idle SQLAlchemy pool connections) |
+| `ENABLE_SCHEDULER` | `false` (do not run an in-process job on a sleeping free service) |
 | `SECRET_KEY` | Long random secret; never reuse the example value |
 | `ALGORITHM` | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` |
@@ -43,7 +56,7 @@ Set these backend environment variables in the host dashboard:
 
 Do not put backend secrets in Vercel variables prefixed with `VITE_`; Vite variables are public in the browser bundle. Keep `ADMIN_TASK_TOKEN` private.
 
-## 3. Seed the production catalog and content index
+## 4. Seed the production catalog and content index
 
 The database starts with tables but no movie catalog. After the API is healthy and TMDB credentials are configured:
 
@@ -67,7 +80,7 @@ The seed operation can take several minutes and may exceed request timeouts or m
 
 The content index and ALS model artifacts live on the service filesystem. Many hosts use ephemeral filesystems, so they can disappear on redeploy/restart. Persist the artifacts on a mounted persistent disk or rebuild them after deployment. The admin endpoint `POST /admin/refresh-index` rebuilds the content index from the database; it does not train ALS.
 
-## 4. Collaborative filtering
+## 5. Collaborative filtering
 
 A newly seeded catalog does not contain user interactions, so collaborative filtering will not immediately provide meaningful recommendations.
 
@@ -75,9 +88,10 @@ Collect watch-history events from multiple independent users first. Then run `py
 
 Until enough interaction data exists, content, genre-affinity, and popularity signals are the expected fallbacks. Do not claim ALS is active just because its code is deployed.
 
-## 5. Verify the release
+## 6. Verify the release
 
-- `GET /health` returns `{"status":"ok"}`.
+- `GET /health/live` returns `{"status":"alive"}` without waking the database.
+- `GET /health` returns `{"status":"ok"}` when Neon is reachable; the first database request after scale-to-zero can be slower.
 - `GET /` returns the API welcome message.
 - `/docs` loads and exposes the API routes.
 - TMDB-backed trending, search, details, and discover endpoints return data.
@@ -88,12 +102,14 @@ Until enough interaction data exists, content, genre-affinity, and popularity si
 - Test from the actual Vercel domain, not only localhost.
 - Check API logs for CORS, database, TMDB, model-loading, and memory errors.
 
-## 6. Resource and operational limits
+## 7. Resource and operational limits
 
 SentenceTransformers/PyTorch inference and the FAISS index require materially more memory than a static frontend. A 512 MB API instance is not a reliable target for loading the embedding model and serving personalized recommendations; plan for a larger memory tier and verify under real requests. The service also needs persistent storage or an artifact rebuild strategy.
 
-The scheduler currently runs inside the API process. Use one instance for this portfolio deployment; move scheduled catalog updates to a dedicated worker or managed cron before scaling horizontally. SQLAlchemy `create_all` at startup is not a substitute for versioned database migrations. Back up the production database before catalog/schema changes.
+The scheduler runs inside the API process and is disabled on the recommended Render Free configuration (`ENABLE_SCHEDULER=false`). Free services sleep after 15 minutes without inbound traffic, so scheduled work is not reliable there. Run catalog refreshes manually through the protected admin endpoint or move them to a separate scheduled worker/cron service. SQLAlchemy `create_all` at startup is retained for the current project setup, but is not a substitute for versioned database migrations. Back up the production database before catalog/schema changes.
 
-## 7. CI
+For Neon, set `DB_POOL_MODE=null`. This uses SQLAlchemy `NullPool`, which closes each database connection when its unit of work ends instead of leaving idle connections in the API process. Neon can then suspend compute after its idle window. The first query after suspension wakes the database and adds latency. Do not add uptime-monitoring pings that repeatedly call database-backed endpoints; use `/health/live` for process liveness.
+
+## 8. CI
 
 GitHub Actions runs the backend test suite and frontend lint/build checks on pushes and pull requests targeting `feature/deepcine-2.0`. A green CI run validates those automated checks only; it does not validate secrets, database connectivity, TMDB access, model artifacts, or live hosting.
