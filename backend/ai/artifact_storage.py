@@ -1,13 +1,15 @@
-"""Download and publish versioned content-recommender artifacts in GCS.
+"""Publish and download immutable content-recommender generations in GCS.
 
-The manifest is uploaded last and acts as the publication marker. Downloads are
-staged locally and checksum-validated before replacing the active files.
+Each publication writes data under a unique generation prefix. A single small
+current.json object is replaced last to activate that generation atomically.
+Readers resolve the pointer once and download only objects from that generation.
 Authentication uses Application Default Credentials (ADC).
 """
 import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -17,12 +19,14 @@ logger = logging.getLogger("deepcine.artifacts")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MANIFEST_NAME = "movie_artifact_manifest.json"
+POINTER_NAME = "current.json"
 ARTIFACT_NAMES = (
     "movie_embeddings.npy",
     "movie_ids.npy",
     "movie_index.faiss",
 )
 MODEL_NAME = "all-MiniLM-L6-v2"
+_GENERATION_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 class ArtifactStorageError(RuntimeError):
@@ -37,9 +41,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _object_name(filename: str) -> str:
+def _prefix(*parts: str) -> str:
     prefix = settings.GCS_PREFIX.strip("/")
-    return f"{prefix}/{filename}" if prefix else filename
+    suffix = "/".join(part.strip("/") for part in parts if part)
+    return f"{prefix}/{suffix}" if prefix and suffix else prefix or suffix
+
+
+def _generation_id(manifest_bytes: bytes) -> str:
+    return hashlib.sha256(manifest_bytes).hexdigest()
 
 
 def _validate_staged_generation(staging_dir: Path) -> None:
@@ -109,8 +118,20 @@ def _validate_staged_generation(staging_dir: Path) -> None:
         raise ArtifactStorageError(f"GCS artifact validation failed: {exc}") from exc
 
 
+def _read_active_generation(bucket) -> str:
+    try:
+        pointer_bytes = bucket.blob(_prefix(POINTER_NAME)).download_as_bytes(timeout=30)
+        pointer = json.loads(pointer_bytes)
+        generation = pointer.get("generation")
+        if not isinstance(generation, str) or not _GENERATION_RE.fullmatch(generation):
+            raise ValueError("invalid generation identifier")
+        return generation
+    except Exception as exc:
+        raise ArtifactStorageError(f"Could not read active GCS artifact pointer: {exc}") from exc
+
+
 def download_artifacts_from_gcs() -> bool:
-    """Download one complete generation to the API instance's local disk."""
+    """Resolve the active generation once, then stage and validate all its files."""
     if not settings.GCS_BUCKET.strip():
         logger.info("GCS_BUCKET is unset; remote recommender artifacts are disabled.")
         return False
@@ -120,34 +141,35 @@ def download_artifacts_from_gcs() -> bool:
 
         client = storage.Client()
         bucket = client.bucket(settings.GCS_BUCKET)
+        generation = _read_active_generation(bucket)
+        generation_prefix = _prefix("generations", generation)
         BASE_DIR.mkdir(parents=True, exist_ok=True)
 
         with tempfile.TemporaryDirectory(prefix="deepcine-artifacts-") as temp:
             staging_dir = Path(temp)
             filenames = (*ARTIFACT_NAMES, MANIFEST_NAME)
             for filename in filenames:
-                blob = bucket.blob(_object_name(filename))
+                object_name = _prefix("generations", generation, filename)
+                blob = bucket.blob(object_name)
                 try:
                     blob.download_to_filename(str(staging_dir / filename), timeout=120)
                 except Exception as exc:
                     raise ArtifactStorageError(
-                        f"Could not download gs://{settings.GCS_BUCKET}/"
-                        f"{_object_name(filename)}: {exc}"
+                        f"Could not download gs://{settings.GCS_BUCKET}/{object_name}: {exc}"
                     ) from exc
 
             _validate_staged_generation(staging_dir)
+            manifest_bytes = (staging_dir / MANIFEST_NAME).read_bytes()
+            if _generation_id(manifest_bytes) != generation:
+                raise ArtifactStorageError("Downloaded manifest does not match active generation.")
 
-            # Replace data files first and the manifest last. If the process is
-            # interrupted, the old manifest cannot validate a mixed generation.
+            # Cloud Run loads artifacts before serving requests. Manifest last
+            # preserves a detectable local generation if replacement is interrupted.
             for filename in ARTIFACT_NAMES:
                 os.replace(staging_dir / filename, BASE_DIR / filename)
             os.replace(staging_dir / MANIFEST_NAME, BASE_DIR / MANIFEST_NAME)
 
-        logger.info(
-            "Downloaded and validated %s recommender artifacts from GCS bucket %s.",
-            len(filenames),
-            settings.GCS_BUCKET,
-        )
+        logger.info("Downloaded validated recommender generation %s.", generation)
         return True
     except ArtifactStorageError:
         raise
@@ -155,28 +177,35 @@ def download_artifacts_from_gcs() -> bool:
         raise ArtifactStorageError(f"Could not initialize recommender artifacts from GCS: {exc}") from exc
 
 
-def publish_artifacts_to_gcs() -> None:
-    """Upload validated local artifacts, publishing the manifest last.
-
-    Run as a one-off operator command after building the index against the
-    target database. Never invoke this from an API request.
-    """
+def publish_artifacts_to_gcs() -> str:
+    """Upload an immutable generation, then atomically activate it via current.json."""
     if not settings.GCS_BUCKET.strip():
         raise ArtifactStorageError("Set GCS_BUCKET before publishing artifacts.")
 
     from google.cloud import storage
 
     _validate_staged_generation(BASE_DIR)
+    manifest_bytes = (BASE_DIR / MANIFEST_NAME).read_bytes()
+    generation = _generation_id(manifest_bytes)
     client = storage.Client()
     bucket = client.bucket(settings.GCS_BUCKET)
+    generation_prefix = _prefix("generations", generation)
 
-    for filename in ARTIFACT_NAMES:
-        bucket.blob(_object_name(filename)).upload_from_filename(
+    for filename in (*ARTIFACT_NAMES, MANIFEST_NAME):
+        bucket.blob(f"{generation_prefix}/{filename}").upload_from_filename(
             str(BASE_DIR / filename), timeout=300
         )
-        logger.info("Uploaded %s to GCS.", filename)
+        logger.info("Uploaded %s for generation %s.", filename, generation)
 
-    bucket.blob(_object_name(MANIFEST_NAME)).upload_from_filename(
-        str(BASE_DIR / MANIFEST_NAME), timeout=120
+    # This single-object write is the publication/activation point. Existing
+    # readers keep using their resolved immutable generation.
+    pointer = json.dumps(
+        {"schema_version": 1, "generation": generation},
+        sort_keys=True,
+        separators=(",", ":"),
     )
-    logger.info("Published recommender manifest last to GCS.")
+    bucket.blob(_prefix(POINTER_NAME)).upload_from_string(
+        pointer, content_type="application/json", timeout=30
+    )
+    logger.info("Activated recommender generation %s.", generation)
+    return generation
