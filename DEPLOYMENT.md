@@ -1,115 +1,138 @@
 # DeepCine deployment runbook
 
-This repository's frontend is a Vite SPA and the backend is a FastAPI service. The frontend can be deployed on Vercel; the API can run on Render Free and use Neon PostgreSQL Free for persistent storage with automatic compute scale-to-zero.
+DeepCine uses:
+- **Frontend:** Vercel (Vite SPA)
+- **API:** Google Cloud Run (FastAPI container, request-based billing, scale to zero)
+- **Database:** Neon PostgreSQL (pooled connection string)
+- **Movie metadata/posters:** TMDB
+
+The frontend and API are separate deployments. A green CI run or successful Vercel build does not prove the production API, database, TMDB credentials, or model artifacts work.
 
 ## 1. Deploy the frontend on Vercel
 
-1. Import the GitHub repository `dolly-bit/DeepCineV2` into Vercel, or use the existing Vercel project.
-2. Set the production branch to `main`.
-3. Set **Root Directory** to `frontend`.
+1. Use the existing Vercel project or import `dolly-bit/DeepCineV2`.
+2. Production branch: `main`.
+3. Root directory: `frontend`.
 4. Build command: `npm run build`.
 5. Output directory: `dist`.
-6. Add environment variable `VITE_API_BASE_URL` with the public HTTPS URL of the deployed FastAPI service (no trailing slash).
-7. Redeploy after changing the environment variable. Vite embeds this value at build time.
+6. Set `VITE_API_BASE_URL` to the public HTTPS Cloud Run service URL (no trailing slash).
+7. Redeploy after changing this variable; Vite embeds it at build time.
 
-The frontend deployment does not include the backend or database. A successful Vercel build alone does not mean API requests work.
+Do not put backend secrets in variables prefixed with `VITE_`; those values are exposed in the browser bundle.
 
-## 2. Create a Neon PostgreSQL database
+## 2. Create the Neon PostgreSQL database
 
-1. Create a project at [Neon](https://neon.com/).
-2. Create or select the production branch/database.
-3. Copy the **pooled** connection string from the Connect dialog. Keep the password private.
-4. Confirm the URL uses SSL (Neon's connection string normally includes `sslmode=require`).
-5. Back up/export the existing Render PostgreSQL database and restore it into Neon before switching production traffic. Do not delete the old database until the restore and application checks succeed.
+1. Create or select a Neon project and production branch.
+2. Copy the **pooled** connection string from Neon's Connect dialog. Keep the password private.
+3. Ensure the URL uses SSL (normally `sslmode=require`).
+4. Store the connection string in Google Secret Manager; do not commit it or paste it into source code.
 
-Neon's Free plan currently includes 100 compute-hours per project each month, 5 GB public network transfer, and automatic compute suspension after five minutes of inactivity. Compute usage is not zero while the database is active; the free quota can be exhausted. Check the current [Neon pricing and limits](https://neon.com/pricing) before relying on the free tier.
+For this deployment, use the Neon pooled endpoint and set `DB_POOL_MODE=null`. The application uses SQLAlchemy `NullPool` so it does not retain idle connections while Neon is suspended.
 
-The repository's `docker-compose.yml` is for local development only; it is not a production database host. A PostgreSQL container running on your laptop is not reachable by Render and must never be used as Render's production `DATABASE_URL`.
+Neon Free compute suspends after inactivity, but it is not unlimited free compute. Check the current [Neon pricing and limits](https://neon.com/pricing). The first query after suspension can be slower while the database resumes.
 
-## 3. Deploy the API on Render Free
+This plan assumes a **fresh Neon database**. Existing Render data is not migrated. The API currently calls SQLAlchemy `Base.metadata.create_all()` during startup to create missing tables. This does not apply schema alterations to existing tables and is not a replacement for versioned Alembic migrations. Back up data before any future schema migration.
 
-For Render:
-- Repository: `dolly-bit/DeepCineV2`
-- Branch: `main`
-- Root directory: `backend`
-- Runtime: Python
-- Build command: `pip install -r requirements.txt`
-- Start command: `python run.py`
-- Health check path: `/health/live` (process liveness only; does not query Neon)
-- Use one API instance initially. Free services sleep after 15 minutes without inbound traffic and take about one minute to wake on the next request.
-- Set `ENABLE_SCHEDULER=false`; an in-process scheduler cannot reliably run while a free service is asleep.
+## 3. Prepare Google Cloud
 
-Set these backend environment variables in the host dashboard:
+1. Create/select a Google Cloud project and attach a billing account.
+2. Enable the Cloud Run, Cloud Build, Artifact Registry, and Secret Manager APIs.
+3. Choose a region close to the Neon database. If Neon is in Singapore, use `asia-southeast1` for the API to reduce database round-trip latency.
+4. Create an Artifact Registry Docker repository, for example:
+   `gcloud artifacts repositories create deepcine --repository-format=docker --location=asia-southeast1`
+5. Create secrets in Secret Manager for:
+   - `DATABASE_URL` — Neon pooled connection string
+   - `SECRET_KEY` — long, randomly generated JWT signing secret
+   - `TMDB_API_KEY` and `TMDB_ACCESS_TOKEN` — TMDB credentials
+   - `ADMIN_TASK_TOKEN` — long, random operator-only token
 
-| Key | Value |
-|---|---|
-| `DATABASE_URL` | Neon pooled PostgreSQL connection string (keep `sslmode=require`) |
-| `DB_POOL_MODE` | `null` (close connections instead of retaining idle SQLAlchemy pool connections) |
-| `ENABLE_SCHEDULER` | `false` (do not run an in-process job on a sleeping free service) |
-| `SECRET_KEY` | Long random secret; never reuse the example value |
-| `ALGORITHM` | `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` |
-| `TMDB_API_KEY` | Your TMDB API key |
-| `TMDB_ACCESS_TOKEN` | Your TMDB API Read Access Token |
-| `ALLOWED_ORIGINS` | Exact Vercel production origin, e.g. `https://deepcine-v2.vercel.app` |
-| `ADMIN_TASK_TOKEN` | Long random operator-only secret |
+Grant the Cloud Run service identity access to these secrets. Do not put secret values in GitHub, Docker build arguments, or the frontend.
 
-Do not put backend secrets in Vercel variables prefixed with `VITE_`; Vite variables are public in the browser bundle. Keep `ADMIN_TASK_TOKEN` private.
+Cloud Run requires a billing account. Scale-to-zero and request-based billing reduce idle costs, but they do **not** guarantee a zero bill. Set a Google Cloud budget alert; budget alerts notify you and are not a hard spending cap.
 
-## 4. Seed the production catalog and content index
+## 4. Build and deploy the API container
 
-The database starts with tables but no movie catalog. After the API is healthy and TMDB credentials are configured:
+The repository-root `Dockerfile` builds the backend from `backend/`. The root `.dockerignore` excludes local secrets, virtual environments, frontend files, datasets, and generated model artifacts.
 
-1. Generate a long random `ADMIN_TASK_TOKEN` and set it in the API host environment.
-2. Redeploy/restart the API so the setting is loaded.
-3. Call `POST /admin/seed` with the same value in the `X-Admin-Token` header.
-4. Confirm the response reports successful catalog import and `movies_indexed` greater than zero.
-5. Check the home, search, detail, and recommendation routes against the public API.
-
-Example PowerShell:
+From the repository root, after installing and authenticating the Google Cloud CLI:
 
 ```powershell
-$api = "https://YOUR-API-HOST"
-$token = "YOUR_ADMIN_TASK_TOKEN"
-Invoke-RestMethod -Method Post -Uri "$api/admin/seed" -Headers @{
-  "X-Admin-Token" = $token
-}
+$PROJECT_ID = "YOUR_GCP_PROJECT_ID"
+$REGION = "asia-southeast1"
+$IMAGE = "$REGION-docker.pkg.dev/$PROJECT_ID/deepcine/deepcine-api"
+
+gcloud config set project $PROJECT_ID
+gcloud builds submit --tag $IMAGE .
 ```
 
-The seed operation can take several minutes and may exceed request timeouts or memory limits on small instances. If it fails, use the host's shell/console to run `python import_genres.py`, `python import_movies.py`, then `python generate_embeddings.py` from the backend directory. Do not repeatedly retry a timed-out seed request without checking the database and index first.
+Deploy with request-based billing, scale-to-zero, and a single maximum instance initially:
 
-The content index and ALS model artifacts live on the service filesystem. Many hosts use ephemeral filesystems, so they can disappear on redeploy/restart. Persist the artifacts on a mounted persistent disk or rebuild them after deployment. The admin endpoint `POST /admin/refresh-index` rebuilds the content index from the database; it does not train ALS.
+```powershell
+gcloud run deploy deepcine-api `
+  --image $IMAGE `
+  --region $REGION `
+  --platform managed `
+  --allow-unauthenticated `
+  --port 8080 `
+  --memory 2Gi `
+  --cpu 2 `
+  --min 0 `
+  --max 1 `
+  --concurrency 10 `
+  --timeout 300 `
+  --cpu-throttling `
+  --set-env-vars "DB_POOL_MODE=null,ENABLE_SCHEDULER=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=60,ALLOWED_ORIGINS=https://deepcine-v2.vercel.app" `
+  --set-secrets "DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,TMDB_API_KEY=TMDB_API_KEY:latest,TMDB_ACCESS_TOKEN=TMDB_ACCESS_TOKEN:latest,ADMIN_TASK_TOKEN=ADMIN_TASK_TOKEN:latest"
+```
 
-## 5. Collaborative filtering
+The command assumes the service identity has permission to access those secrets. If your Vercel production domain differs, change `ALLOWED_ORIGINS` to the exact origin.
 
-A newly seeded catalog does not contain user interactions, so collaborative filtering will not immediately provide meaningful recommendations.
+The initial 2 GiB memory setting is a starting point, not a proven capacity guarantee. Sentence Transformers/PyTorch and FAISS consume substantially more memory than a basic FastAPI service. Watch Cloud Run memory and logs during model inference; increase memory if the container is OOM-killed. Keep max instances at 1 until load and cost are understood.
 
-Collect watch-history events from multiple independent users first. Then run `python train_collaborative_model.py` in the backend environment. Training requires at least five users with at least three distinct watched movies each. Persist both `cf_model.pkl` and `cf_model_manifest.json` together; the manifest verifies the model artifact.
+Cloud Run injects the `PORT` environment variable. `backend/run.py` binds Uvicorn to `0.0.0.0:$PORT`.
 
-Until enough interaction data exists, content, genre-affinity, and popularity signals are the expected fallbacks. Do not claim ALS is active just because its code is deployed.
+## 5. Important: recommendation artifact persistence
 
-## 6. Verify the release
+The content recommender expects these four files under the backend directory:
+- `movie_embeddings.npy`
+- `movie_ids.npy`
+- `movie_index.faiss`
+- `movie_artifact_manifest.json`
 
-- `GET /health/live` returns `{"status":"alive"}` without waking the database.
-- `GET /health` returns `{"status":"ok"}` when Neon is reachable; the first database request after scale-to-zero can be slower.
+They are intentionally excluded from Git and Docker build context. The current index builder writes them to the container's local filesystem. **Cloud Run's writable container filesystem is ephemeral**: files can disappear when an instance stops, is replaced, or a new revision is deployed. With min instances set to zero, do not assume a generated FAISS index will still exist after scale-to-zero.
+
+Therefore, the API container can be deployed and the database/API flows can be verified, but a durable production content-recommendation rollout is not complete until artifacts are stored in durable object storage (for example, Google Cloud Storage) and downloaded/validated when an instance starts, or a different durable artifact delivery strategy is implemented. Do not treat a one-time `/admin/seed` or `/admin/refresh-index` call as a permanent fix: both currently build files on the local container filesystem.
+
+The existing recommender returns no content-based recommendations when all content artifacts are absent. If artifacts are only partially present, it raises an integrity/validation error rather than silently using a broken index.
+
+The embedding model `sentence-transformers/all-MiniLM-L6-v2` is loaded lazily and may need to download from Hugging Face on first inference. That can increase cold-start latency and requires outbound access. Monitor memory and startup/request latency before deciding whether to bake the model into the image.
+
+## 6. Scheduler behaviour
+
+Set `ENABLE_SCHEDULER=false` on Cloud Run. The code in `main.py` honours this setting. An in-process APScheduler job cannot be relied on while Cloud Run scales an instance to zero. Run catalog refreshes manually or move them to a separate scheduled job after the artifact persistence design is in place.
+
+## 7. Verify the deployed API
+
+After deployment, get the service URL:
+
+```powershell
+gcloud run services describe deepcine-api --region $REGION --format "value(status.url)"
+```
+
+Then verify:
+
+- `GET /health/live` returns `{"status":"alive"}` without querying Neon.
+- `GET /health` returns `{"status":"ok"}` when Neon is reachable.
 - `GET /` returns the API welcome message.
 - `/docs` loads and exposes the API routes.
 - TMDB-backed trending, search, details, and discover endpoints return data.
-- Signup/login works against the production database.
+- Signup/login works against the fresh Neon database.
 - Watch history, ratings, and watchlist persist after a new login.
-- Personalized recommendations exclude already watched/rated/saved items as intended.
-- Content artifacts load and pass their manifest/hash checks.
-- Test from the actual Vercel domain, not only localhost.
-- Check API logs for CORS, database, TMDB, model-loading, and memory errors.
+- CORS works from the actual Vercel production origin.
+- Cloud Run logs show no database, TMDB, model-loading, or memory errors.
 
-## 7. Resource and operational limits
+Keep the existing Render service available until the Cloud Run API and Vercel frontend have passed these checks. Only then remove the old service.
 
-SentenceTransformers/PyTorch inference and the FAISS index require materially more memory than a static frontend. A 512 MB API instance is not a reliable target for loading the embedding model and serving personalized recommendations; plan for a larger memory tier and verify under real requests. The service also needs persistent storage or an artifact rebuild strategy.
+## 8. CI scope
 
-The scheduler runs inside the API process and is disabled on the recommended Render Free configuration (`ENABLE_SCHEDULER=false`). Free services sleep after 15 minutes without inbound traffic, so scheduled work is not reliable there. Run catalog refreshes manually through the protected admin endpoint or move them to a separate scheduled worker/cron service. SQLAlchemy `create_all` at startup is retained for the current project setup, but is not a substitute for versioned database migrations. Back up the production database before catalog/schema changes.
-
-For Neon, set `DB_POOL_MODE=null`. This uses SQLAlchemy `NullPool`, which closes each database connection when its unit of work ends instead of leaving idle connections in the API process. Neon can then suspend compute after its idle window. The first query after suspension wakes the database and adds latency. Do not add uptime-monitoring pings that repeatedly call database-backed endpoints; use `/health/live` for process liveness.
-
-## 8. CI
-
-GitHub Actions runs the backend test suite and frontend lint/build checks on pushes and pull requests targeting `feature/deepcine-2.0`. A green CI run validates those automated checks only; it does not validate secrets, database connectivity, TMDB access, model artifacts, or live hosting.
+GitHub Actions checks backend tests and frontend lint/build. Passing CI validates those automated checks only; it does not validate Google Cloud permissions, secret configuration, Neon connectivity, TMDB credentials, container memory, or persistent model artifact storage.
