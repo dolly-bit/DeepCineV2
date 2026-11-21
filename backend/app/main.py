@@ -25,9 +25,12 @@ from app.services.tmdb.movies import (
     get_trending_movies, get_top_rated_movies, get_upcoming_movies,
 )
 from app.services.tmdb.client import aclose_client
+from ai.artifact_storage import download_artifacts_from_gcs
+from ai.recommender import _get_index_and_ids
 from app.schedular.schedular import start_scheduler, stop_scheduler
 
 logger = logging.getLogger("deepcine")
+content_artifacts_ready = False
 
 
 def initialize_database() -> None:
@@ -85,6 +88,19 @@ async def warm_up_caches():
     # synchronous SQLAlchemy operations off the event loop.
     await asyncio.to_thread(initialize_database)
 
+    global content_artifacts_ready
+    if settings.GCS_BUCKET.strip():
+        # Download, checksum-validate, and load one complete artifact generation
+        # before the instance begins serving recommendation traffic.
+        await asyncio.to_thread(download_artifacts_from_gcs)
+        await asyncio.to_thread(_get_index_and_ids)
+        content_artifacts_ready = True
+        logger.info("Content recommender artifacts are ready.")
+    else:
+        logger.warning(
+            "GCS_BUCKET is unset; content-based recommendations may be unavailable."
+        )
+
     async def _warm():
         try:
             await asyncio.gather(
@@ -126,7 +142,14 @@ def health():
         raise HTTPException(
             status_code=503, detail="database unavailable"
         ) from exc
-    return {"status": "ok"}
+    if settings.GCS_BUCKET.strip() and not content_artifacts_ready:
+        raise HTTPException(
+            status_code=503, detail="content recommender artifacts unavailable"
+        )
+    return {
+        "status": "ok",
+        "content_recommender": "ready" if content_artifacts_ready else "not_configured",
+    }
 
 
 @app.get("/health/live")
