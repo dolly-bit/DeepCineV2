@@ -26,7 +26,7 @@ from app.services.tmdb.movies import (
 )
 from app.services.tmdb.client import aclose_client
 from ai.artifact_storage import download_artifacts_from_gcs
-from ai.recommender import _get_index_and_ids, invalidate_index_cache
+from ai.recommender import _get_index_and_ids
 from app.schedular.schedular import start_scheduler, stop_scheduler
 
 logger = logging.getLogger("deepcine")
