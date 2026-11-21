@@ -40,13 +40,15 @@ This plan assumes a **fresh Neon database**. Existing Render data is not migrate
 3. Choose a region close to the Neon database. If Neon is in Singapore, use `asia-southeast1` for the API to reduce database round-trip latency.
 4. Create an Artifact Registry Docker repository, for example:
    `gcloud artifacts repositories create deepcine --repository-format=docker --location=asia-southeast1`
-5. Create secrets in Secret Manager for:
+5. Create a **private** Cloud Storage bucket for recommender artifacts in the same region (or a compatible dual/multi-region), for example:
+   `gcloud storage buckets create gs://YOUR_UNIQUE_DEEPCINE_BUCKET --location=asia-southeast1 --uniform-bucket-level-access`
+6. Create secrets in Secret Manager for:
    - `DATABASE_URL` — Neon pooled connection string
    - `SECRET_KEY` — long, randomly generated JWT signing secret
    - `TMDB_API_KEY` and `TMDB_ACCESS_TOKEN` — TMDB credentials
    - `ADMIN_TASK_TOKEN` — long, random operator-only token
 
-Grant the Cloud Run service identity access to these secrets. Do not put secret values in GitHub, Docker build arguments, or the frontend.
+Grant the Cloud Run service identity access to these secrets and grant it **Storage Object Viewer** on the artifact bucket only. The operator identity used to publish artifacts needs **Storage Object Admin** on that bucket. Do not make the bucket public and do not create service-account key files. Do not put secret values in GitHub, Docker build arguments, or the frontend.
 
 Cloud Run requires a billing account. Scale-to-zero and request-based billing reduce idle costs, but they do **not** guarantee a zero bill. Set a Google Cloud budget alert; budget alerts notify you and are not a hard spending cap.
 
@@ -81,7 +83,7 @@ gcloud run deploy deepcine-api `
   --concurrency 10 `
   --timeout 300 `
   --cpu-throttling `
-  --set-env-vars "DB_POOL_MODE=null,ENABLE_SCHEDULER=false,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=60,ALLOWED_ORIGINS=https://deepcine-v2.vercel.app" `
+  --set-env-vars "DB_POOL_MODE=null,ENABLE_SCHEDULER=false,GCS_BUCKET=YOUR_UNIQUE_DEEPCINE_BUCKET,GCS_PREFIX=recommender,ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=60,ALLOWED_ORIGINS=https://deepcine-v2.vercel.app" `
   --set-secrets "DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,TMDB_API_KEY=TMDB_API_KEY:latest,TMDB_ACCESS_TOKEN=TMDB_ACCESS_TOKEN:latest,ADMIN_TASK_TOKEN=ADMIN_TASK_TOKEN:latest"
 ```
 
@@ -91,19 +93,47 @@ The initial 2 GiB memory setting is a starting point, not a proven capacity guar
 
 Cloud Run injects the `PORT` environment variable. `backend/run.py` binds Uvicorn to `0.0.0.0:$PORT`.
 
-## 5. Important: recommendation artifact persistence
+## 5. Publish durable recommendation artifacts to Google Cloud Storage
 
-The content recommender expects these four files under the backend directory:
+The content recommender requires four files:
 - `movie_embeddings.npy`
 - `movie_ids.npy`
 - `movie_index.faiss`
 - `movie_artifact_manifest.json`
 
-They are intentionally excluded from Git and Docker build context. The current index builder writes them to the container's local filesystem. **Cloud Run's writable container filesystem is ephemeral**: files can disappear when an instance stops, is replaced, or a new revision is deployed. With min instances set to zero, do not assume a generated FAISS index will still exist after scale-to-zero.
+The root `.dockerignore` excludes these local files from the image. Cloud Run downloads a complete generation from the private bucket during startup, validates the manifest, SHA-256 hashes, NumPy arrays, and FAISS index, and only then marks the content recommender ready. If `GCS_BUCKET` is configured but any object is missing or invalid, startup fails rather than serving a broken recommender. Without `GCS_BUCKET`, the API can run but content-based recommendations are unavailable.
 
-Therefore, the API container can be deployed and the database/API flows can be verified, but a durable production content-recommendation rollout is not complete until artifacts are stored in durable object storage (for example, Google Cloud Storage) and downloaded/validated when an instance starts, or a different durable artifact delivery strategy is implemented. Do not treat a one-time `/admin/seed` or `/admin/refresh-index` call as a permanent fix: both currently build files on the local container filesystem.
+Configure these Cloud Run environment variables:
+- `GCS_BUCKET` — bucket name only, without `gs://`
+- `GCS_PREFIX=recommender` — object prefix inside the bucket
 
-The existing recommender returns no content-based recommendations when all content artifacts are absent. If artifacts are only partially present, it raises an integrity/validation error rather than silently using a broken index.
+The Cloud Run runtime service account needs `roles/storage.objectViewer` on this bucket. The bucket must remain private.
+
+### Build and publish an artifact generation
+
+Run this as an operator from the backend directory, using a trusted local environment with the correct production Neon database connection and Google Cloud ADC credentials. Do not run the index build from an API request or from Cloud Run's ephemeral filesystem.
+
+```powershell
+# Authenticate the local Google Cloud SDK user for the publisher.
+gcloud auth application-default login
+
+# Set the bucket and prefix in the current PowerShell session.
+$env:GCS_BUCKET = "YOUR_UNIQUE_DEEPCINE_BUCKET"
+$env:GCS_PREFIX = "recommender"
+
+# Ensure backend/.env points to the intended Neon database.
+# Build the index only if the existing validated artifacts are stale.
+python generate_embeddings.py
+
+# Validate and upload the three data objects, then publish the manifest last.
+python publish_recommender_artifacts.py
+```
+
+The publishing script validates the local manifest, file hashes, IDs, embedding matrix, and FAISS index before upload. It uploads data objects first and the manifest last. Treat publication as a controlled operation: do not run multiple publishers concurrently. Keep a backup of the previous generation before replacing it.
+
+After publishing, deploy Cloud Run with `GCS_BUCKET` and `GCS_PREFIX` set. Startup downloads the objects to the instance's writable filesystem and verifies them before serving traffic. The local copy is disposable; GCS is the durable source of truth.
+
+The existing `/admin/seed` and `/admin/refresh-index` routes still build only local files. They do **not** publish to GCS. Do not use them as the production artifact publication workflow.
 
 The embedding model `sentence-transformers/all-MiniLM-L6-v2` is loaded lazily and may need to download from Hugging Face on first inference. That can increase cold-start latency and requires outbound access. Monitor memory and startup/request latency before deciding whether to bake the model into the image.
 
