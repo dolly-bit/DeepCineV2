@@ -34,6 +34,8 @@ datasets/**
 **/*.pkl
 **/*.pt
 **/*.pth
+**/movie_artifact_manifest.json
+**/cf_model_manifest.json
 **/evaluation/results
 **/*.log
 
