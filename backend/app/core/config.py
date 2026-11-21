@@ -2,7 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
 
     DATABASE_URL: str
     SECRET_KEY: str
@@ -18,16 +21,20 @@ class Settings(BaseSettings):
     DB_POOL_MODE: str = "queue"
 
     # The in-process scheduler is useful for local development, but should
-    # be disabled on a sleeping/free web service. Scheduled work cannot be
-    # relied on while the service is scaled down.
+    # be disabled on a sleeping free/serverless web service.
     ENABLE_SCHEDULER: bool = True
 
-    # Comma-separated list of allowed frontend origins, e.g.
-    # "https://deepcine-v2.vercel.app". Defaults to "*" for local setup.
+    # Comma-separated list of allowed frontend origins.
     ALLOWED_ORIGINS: str = "*"
 
     # Shared-secret token for the /admin/* endpoints.
     ADMIN_TASK_TOKEN: str = ""
+
+    # Optional private GCS bucket containing the published content index.
+    # Cloud Run uses its attached service account via Application Default
+    # Credentials; no service-account key should be stored in environment vars.
+    GCS_BUCKET: str = ""
+    GCS_PREFIX: str = "recommender"
 
     @property
     def allowed_origins_list(self) -> list[str]:
