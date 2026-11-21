@@ -101,7 +101,7 @@ The content recommender requires four files:
 - `movie_index.faiss`
 - `movie_artifact_manifest.json`
 
-The root `.dockerignore` excludes these local files from the image. Cloud Run downloads a complete generation from the private bucket during startup, validates the manifest, SHA-256 hashes, NumPy arrays, and FAISS index, and only then marks the content recommender ready. If `GCS_BUCKET` is configured but any object is missing or invalid, startup fails rather than serving a broken recommender. Without `GCS_BUCKET`, the API can run but content-based recommendations are unavailable.
+The root `.dockerignore` excludes these local files from the image. Cloud Run resolves `current.json` and downloads a complete immutable generation from the private bucket during startup, validates the manifest, SHA-256 hashes, NumPy arrays, and FAISS index, and only then marks the content recommender ready. If `GCS_BUCKET` is configured but any object is missing or invalid, startup fails rather than serving a broken recommender. Without `GCS_BUCKET`, the API can run but content-based recommendations are unavailable.
 
 Configure these Cloud Run environment variables:
 - `GCS_BUCKET` — bucket name only, without `gs://`
@@ -129,9 +129,9 @@ python generate_embeddings.py
 python publish_recommender_artifacts.py
 ```
 
-The publishing script validates the local manifest, file hashes, IDs, embedding matrix, and FAISS index before upload. It uploads data objects first and the manifest last. Treat publication as a controlled operation: do not run multiple publishers concurrently. Keep a backup of the previous generation before replacing it.
+The publishing script validates the local manifest, file hashes, IDs, embedding matrix, and FAISS index before upload. It derives a SHA-256 generation ID from the manifest and uploads all four files under `recommender/generations/<generation-id>/`. Only after every immutable object has uploaded does it replace `recommender/current.json` with the active generation ID. Cloud Storage object replacement is atomic, so each API startup resolves one pointer and downloads files only from that immutable generation. A failed upload leaves the previous pointer active. Old generations are intentionally retained; do not delete them while any Cloud Run revision may still be starting. Concurrent publishers of the exact same manifest are safe because they write identical object names and contents; different publishers race only to choose which complete generation becomes active, with the last pointer write winning.
 
-After publishing, deploy Cloud Run with `GCS_BUCKET` and `GCS_PREFIX` set. Startup downloads the objects to the instance's writable filesystem and verifies them before serving traffic. The local copy is disposable; GCS is the durable source of truth.
+After publishing, deploy Cloud Run with `GCS_BUCKET` and `GCS_PREFIX` set. Startup reads `current.json` once, downloads that generation to the instance's writable filesystem, and verifies the manifest and all checksums before serving traffic. The local copy is disposable; GCS is the durable source of truth.
 
 The existing `/admin/seed` and `/admin/refresh-index` routes still build only local files. They do **not** publish to GCS. Do not use them as the production artifact publication workflow.
 
